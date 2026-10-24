@@ -30,6 +30,12 @@ def test_the_layout_in_the_setup_prompt_is_one_the_page_can_read():
     assert reports == [("Weekly", Path("C:/work/reports"), False, "*.md")]
 
 
+def test_the_prompt_in_the_readme_is_the_same_as_the_one_in_the_docs():
+    readme = (PROMPT.parent.parent / "README.md").read_text(encoding="utf-8")
+
+    assert prompt_text() in readme
+
+
 def test_the_command_in_the_setup_prompt_names_a_real_option():
     text = PROMPT.read_text(encoding="utf-8")
 

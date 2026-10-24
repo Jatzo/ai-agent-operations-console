@@ -50,6 +50,48 @@ python serve_dashboard.py --root C:\path\to\index-folder
 
 `--home` points at the Claude folder to read skills, agents and history from. It defaults to `~\.claude`.
 
+### Or let Claude Code write the index for you
+
+Open Claude Code in a new, empty folder (this becomes your index folder) and paste the prompt below. It asks for
+your project folders and report locations one at a time, shows you both files, and writes nothing until you say
+yes. It creates only `CLAUDE.md` and `INBOX.md`. The same prompt is in [docs/SETUP_PROMPT.md](docs/SETUP_PROMPT.md).
+
+```text
+I want to point a local page called AI agent operations console at my own work. It needs two files in this folder: CLAUDE.md and INBOX.md. Create nothing else, and do not change, move or delete any file outside this folder.
+
+First, ask me for the full path of each project folder I want shown, one at a time, and what to call it. Check that each path exists and is a folder. Tell me if one does not.
+
+Then ask me whether any of my routines or scripts leave a report in a folder or in one fixed file. For each, ask for what it is called, when it runs, and the path. If the report file has a date in its name, ask me to show one example, and write the date part as YYYY-MM-DD.
+
+Show me both files in full and wait for me to say yes before you write them.
+
+CLAUDE.md must follow this layout exactly. The two headings are read by the page, so do not rename them. Each table's last column must hold the path in backticks. Use full paths.
+
+# Index
+
+## Where things are
+
+| What | Where |
+|---|---|
+| <name I gave> | `<full path>` |
+
+## Where each routine leaves its report
+
+| Routine | When | Report |
+|---|---|---|
+| <name> | <when> | `<full path, with YYYY-MM-DD in place of the date if it has one>` |
+
+INBOX.md must be exactly:
+
+# Inbox
+
+One line per idea.
+
+When both files are written, tell me the folder you are in and give me this command to run in PowerShell, with the folder filled in:
+
+python serve_dashboard.py --root "<this folder>"
+```
+
 ## Turning the chat on for real
 
 The chat runs Claude Code, so Claude Code must be installed and signed in. It refuses to start until you have run
