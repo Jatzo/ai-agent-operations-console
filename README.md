@@ -1,3 +1,5 @@
+<img src="docs/img/jatzo-goat.png" alt="Jatzo goat logo" width="72" align="right">
+
 # AI agent operations console
 
 Built for my own business. Published as an example version with demo data.
@@ -142,4 +144,4 @@ Anthropic. Read the limits section of the write-up before you point it at a fold
 
 ## Licence
 
-MIT. See `LICENSE`.
+MIT. See `LICENSE`. The Jatzo goat logo is not part of that licence and stays with Jatzo.
