@@ -26,9 +26,9 @@ import build_dashboard as overview
 import chat
 import world
 
-CODE_DIR = OS_DIR = Path(__file__).resolve().parent
+CODE_DIR = Path(__file__).resolve().parent
 HOME = Path.home() / ".claude"
-WEB_DIR = OS_DIR / "web"
+WEB_DIR = CODE_DIR / "web"
 PORTS = range(8765, 8776)
 REQUEST_TIMEOUT_SECONDS = 5
 MAX_BODY_BYTES = 4096
@@ -460,7 +460,7 @@ def indexed_projects(os_dir):
         return []
 
 
-def make_server(os_dir=OS_DIR, ports=PORTS, home=HOME, chat_manager=None, gate_file=None):
+def make_server(os_dir=CODE_DIR, ports=PORTS, home=HOME, chat_manager=None, gate_file=None):
     """Binds to 127.0.0.1 on the first free port in ports. Raises OSError if none is free."""
     last_error = OSError("No port was tried.")
     for port in ports:
@@ -506,7 +506,7 @@ def serve(server):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Serves the AI agent operations console on this computer only.")
-    parser.add_argument("--root", type=Path, default=OS_DIR, help="folder holding the index CLAUDE.md and INBOX.md")
+    parser.add_argument("--root", type=Path, default=CODE_DIR, help="folder holding the index CLAUDE.md and INBOX.md")
     parser.add_argument("--home", type=Path, default=HOME, help="the Claude folder to read skills, agents and history from")
     arguments = parser.parse_args(argv)
     if not (arguments.root / "CLAUDE.md").is_file():

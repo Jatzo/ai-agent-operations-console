@@ -69,7 +69,7 @@ def test_the_gate_script_writes_the_file_the_server_reads():
     gate_source = (Path(__file__).resolve().parent / "chat_gate.py").read_text(encoding="utf-8")
 
     assert serve_dashboard.TESTED_VERSION_FILE in gate_source
-    assert "OS_DIR = Path(__file__).resolve().parent.parent" in gate_source
+    assert "CODE_DIR = Path(__file__).resolve().parent.parent" in gate_source
     assert serve_dashboard.CODE_DIR == Path(serve_dashboard.__file__).resolve().parent
 
 

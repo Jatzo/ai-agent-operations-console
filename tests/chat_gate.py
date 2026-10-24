@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chat
 
-OS_DIR = Path(__file__).resolve().parent.parent
+CODE_DIR = Path(__file__).resolve().parent.parent
 HOME = Path.home() / ".claude"
 ALLOWED = {"Read", "Glob", "Grep"}
 results = []
@@ -90,7 +90,7 @@ def home_listing():
 
 
 def small(executable, version):
-    manager = chat.ChatManager(OS_DIR, HOME, lambda: [], executable=executable, version=lambda: version, tested=lambda: {version})
+    manager = chat.ChatManager(CODE_DIR, HOME, lambda: [], executable=executable, version=lambda: version, tested=lambda: {version})
     events = []
     manager.run_message("Reply with the single word ready.", None, None, events.append)
     kinds = [event["t"] for event in events]
@@ -98,7 +98,7 @@ def small(executable, version):
     record("a real message streams start, text and done", kinds[:1] == ["start"] and "text" in kinds and kinds[-1] == "done", str(kinds[-3:]))
     done = events[-1] if events else {}
     record("the real cost is reported and small", done.get("t") == "done" and 0 < done.get("cost", 0) < 0.5, f"${done.get('cost')}")
-    raw, _ = raw_run(executable, "Reply with the single word ready.", OS_DIR)
+    raw, _ = raw_run(executable, "Reply with the single word ready.", CODE_DIR)
     types = sorted({event.get("type") for event in raw})
     print("raw event types:", types)
     init = next((event for event in raw if event.get("type") == "system" and event.get("subtype") == "init"), {})
@@ -220,7 +220,7 @@ def main():
     if small_only:
         print("Small check passed. Run without --small for the full gate.")
         return 0
-    path = OS_DIR / "tested_claude_version.txt"
+    path = CODE_DIR / "tested_claude_version.txt"
     lines = chat.tested_versions(path)
     lines = sorted(lines)
     if version not in lines:

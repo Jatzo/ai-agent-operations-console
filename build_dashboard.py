@@ -14,7 +14,7 @@ import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-OS_DIR = Path(__file__).resolve().parent
+CODE_DIR = Path(__file__).resolve().parent
 WINDOW_DAYS = 7
 GIT_TIMEOUT_SECONDS = 10
 PRUNED_FOLDERS = {"node_modules", ".git", "__pycache__", ".venv", ".next"}
@@ -348,7 +348,7 @@ def build_page(os_dir, now):
     )
 
 
-def run(os_dir=OS_DIR):
+def run(os_dir=CODE_DIR):
     """Write dashboard.html in os_dir and return its path. The output path is never taken from the caller."""
     os_dir = Path(os_dir)
     page = build_page(os_dir, time.time())
