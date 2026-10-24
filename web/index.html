@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="os-token" content="{{token}}">
+<meta name="color-scheme" content="dark">
+<title>AI agent operations console</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+<div class="brand">
+<span class="mark" aria-hidden="true"></span>
+<h1>AI agent operations console</h1>
+<span class="clock" id="clock" aria-hidden="true"></span>
+</div>
+<div class="search">
+<label class="sr" for="q">Search the world</label>
+<input id="q" type="search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" placeholder="Search anything (press /)">
+<ul id="results" role="listbox" aria-label="Search results" hidden></ul>
+</div>
+<nav class="controls" aria-label="View and tools">
+<div class="tabs" role="tablist" aria-label="View">
+<button type="button" role="tab" id="tab-today" aria-selected="true" aria-controls="today-view">Today</button>
+<button type="button" role="tab" id="tab-world" aria-selected="false" aria-controls="world-view" tabindex="-1">World</button>
+<button type="button" role="tab" id="tab-cards" aria-selected="false" aria-controls="cards-view" tabindex="-1">Cards</button>
+</div>
+<button type="button" class="tool" id="chat-open">Chat</button>
+<button type="button" class="tool" id="calm" aria-pressed="false">Calm</button>
+<button type="button" class="tool" id="fit">Fit</button>
+<div class="more">
+<button type="button" class="tool" id="more" aria-expanded="false" aria-controls="more-body">More</button>
+<div class="more-body" id="more-body" hidden>
+<button type="button" class="tool" id="rebuild">Rebuild</button>
+<button type="button" class="tool" id="rescan">Rescan history</button>
+</div>
+</div>
+</nav>
+</header>
+<p class="banner" id="banner" role="alert" hidden></p>
+<main>
+<section id="today-view" role="tabpanel" aria-labelledby="tab-today">
+<div class="cards-wrap">
+<header class="cards-top">
+<div>
+<h2 class="page-title">Today</h2>
+<p class="note" id="today-updated" role="status">Loading.</p>
+</div>
+<button type="button" class="tool" id="today-refresh">Refresh</button>
+</header>
+<section aria-labelledby="today-dirty-title">
+<h3 class="section" id="today-dirty-title">Uncommitted work</h3>
+<div class="grid" id="today-dirty"></div>
+</section>
+<section aria-labelledby="today-reports-title">
+<h3 class="section" id="today-reports-title">Overnight reports</h3>
+<div class="grid" id="today-reports"></div>
+</section>
+<section aria-labelledby="today-ideas-title">
+<h3 class="section" id="today-ideas-title">Inbox ideas</h3>
+<div class="grid" id="today-ideas"></div>
+</section>
+<section aria-labelledby="today-follow-title">
+<h3 class="section" id="today-follow-title">Follow-ups due</h3>
+<div class="grid" id="today-follow"></div>
+</section>
+</div>
+</section>
+<section id="world-view" role="tabpanel" aria-labelledby="tab-world" hidden>
+<canvas id="world" tabindex="0" aria-label="Map of your work. Each shape is a project, report, routine, skill, agent or idea, joined by lines. Use the search bar or the Cards tab for a list version. Arrow keys pan, plus and minus zoom, F fits, Escape clears."></canvas>
+<details class="filters" id="filters">
+<summary>Show</summary>
+<div id="filter-list"></div>
+</details>
+<p class="readout" id="scan-status" role="status"></p>
+<aside class="side" id="side" aria-label="Details and chat" hidden>
+<div class="side-tabs" role="tablist" aria-label="Panel">
+<button type="button" class="tab" role="tab" id="tab-details" aria-selected="true" aria-controls="detail">Details</button>
+<button type="button" class="tab" role="tab" id="tab-chat" aria-selected="false" aria-controls="chat" tabindex="-1">Chat</button>
+<button type="button" class="tool close" id="side-close">Close</button>
+</div>
+<div class="detail pane" id="detail" role="tabpanel" aria-labelledby="tab-details"></div>
+<div class="pane" id="chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
+<p class="chip" id="chat-chip">General chat · read only · Sonnet · files Claude reads are sent to Anthropic</p>
+<p><span class="ro">Read only</span></p>
+<p class="msg-note bad" id="chat-problem" role="status" hidden></p>
+<div id="chat-log" role="log" aria-label="Conversation" aria-live="off" aria-busy="false" tabindex="0"></div>
+<form id="chat-form" autocomplete="off">
+<label class="sr" for="chat-input">Message Claude</label>
+<textarea id="chat-input" maxlength="4000" rows="3" placeholder="Ask a question (Ctrl+Enter sends)"></textarea>
+<div class="chat-actions">
+<button type="submit" class="tool" id="chat-send">Send</button>
+<button type="button" class="tool" id="chat-stop" hidden>Stop</button>
+<button type="button" class="tool" id="chat-new">New chat</button>
+<button type="button" class="tool" id="chat-copy">Copy command</button>
+</div>
+<p class="note" id="chat-cost" role="status"></p>
+</form>
+</div>
+</aside>
+<p class="sr" id="live" aria-live="polite"></p>
+<div class="ticker" id="ticker" aria-hidden="true"><div id="ticker-track"></div></div>
+</section>
+<section id="cards-view" role="tabpanel" aria-labelledby="tab-cards" hidden>
+<div class="cards-wrap">
+<header class="cards-top">
+<div>
+<h2 class="page-title">Work overview</h2>
+<p class="note" id="updated" role="status">Loading.</p>
+</div>
+<button type="button" class="tool" id="refresh">Refresh</button>
+</header>
+<section aria-labelledby="projects-title">
+<h3 class="section" id="projects-title">Projects</h3>
+<div class="grid" id="projects"></div>
+</section>
+<section aria-labelledby="reports-title">
+<h3 class="section" id="reports-title">Reports</h3>
+<div class="grid" id="reports"></div>
+</section>
+<section aria-labelledby="inbox-title">
+<h3 class="section" id="inbox-title">Inbox</h3>
+<div class="grid">
+<article class="card">
+<ul id="ideas"></ul>
+<p class="note" id="ideas-empty" hidden>Empty.</p>
+<form id="add-form" class="add-form">
+<label for="idea">Add an idea</label>
+<div class="row">
+<input id="idea" name="idea" type="text" maxlength="300" autocomplete="off" required>
+<button type="submit" class="tool">Add</button>
+</div>
+<p class="note" id="add-status" role="status"></p>
+</form>
+</article>
+</div>
+</section>
+</div>
+</section>
+</main>
+<script src="/graph.js" defer></script>
+<script src="/app.js" defer></script>
+</body>
+</html>
