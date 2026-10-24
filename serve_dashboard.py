@@ -206,7 +206,7 @@ def append_idea(os_dir, text, lock):
 
 class Handler(http.server.BaseHTTPRequestHandler):
     timeout = REQUEST_TIMEOUT_SECONDS
-    server_version = "OSDashboard"
+    server_version = "AIAgentConsole"
     sys_version = ""
 
     def log_message(self, format, *args):
