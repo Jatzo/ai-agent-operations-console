@@ -79,11 +79,10 @@ def today_checks(browser, address, out, width, height, temp_inbox):
     context, page = new_page(browser, address, width, height, view="today")
     check(page.get_attribute("#tab-today", "aria-selected") == "true", f"{label}: the page opens on Today")
     check(not page.is_visible("#world"), f"{label}: the map is not what you see first")
-    titles = [page.inner_text(f"#{name}") for name in ("today-dirty-title", "today-reports-title", "today-ideas-title", "today-follow-title")]
-    check([t.lower() for t in titles] == ["uncommitted work", "overnight reports", "inbox ideas", "follow-ups due"], f"{label}: the four sections are there ({titles})")
-    for name in ("today-dirty", "today-reports", "today-ideas", "today-follow"):
+    titles = [page.inner_text(f"#{name}") for name in ("today-dirty-title", "today-reports-title", "today-ideas-title")]
+    check([t.lower() for t in titles] == ["uncommitted work", "overnight reports", "inbox ideas"], f"{label}: the three sections are there ({titles})")
+    for name in ("today-dirty", "today-reports", "today-ideas"):
         check(page.locator(f"#{name} .card").count() >= 1, f"{label}: {name} shows at least a card or a plain empty message")
-    check("Follow-ups are not connected yet." in page.inner_text("#today-follow"), f"{label}: follow-ups say plainly that they are not connected")
     check("Latest added first" in page.inner_text("#today-ideas"), f"{label}: the inbox says how it is ordered")
     wait_until(lambda: page.locator("#today-view .card .tool").count() >= 1, 60)
     page.screenshot(path=str(out / f"today-{width}.png"), full_page=True)

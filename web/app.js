@@ -1107,8 +1107,6 @@
     target = $("today-ideas");
     target.replaceChildren(todayCard("Inbox", ideaParts));
 
-    target = $("today-follow");
-    target.replaceChildren(todayCard("Not connected", [element("p", "note", "Follow-ups are not connected yet.")]));
     $("today-updated").textContent = "Updated " + overviewData.generated;
   }
 
