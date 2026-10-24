@@ -1,4 +1,4 @@
-# OS world
+# AI agent operations console
 
 Built for my own business. Published as an example version with demo data.
 
@@ -8,7 +8,7 @@ and lets you ask Claude Code about any node, read only.
 It runs on your computer only. It reads folders and git, and writes one thing: a line added to `INBOX.md` when
 you add an idea.
 
-![Today](docs/img/today.png)
+![A 15 second tour of the demo: the Today page, the map, the read-only chat and the safety controls](docs/img/console-tour.gif)
 
 ## Try it in one command
 
