@@ -1,0 +1,497 @@
+[
+ {
+  "name": "safe mode dropped",
+  "file": "chat.py",
+  "old": "        \"--safe-mode\", \"--restricted\",\n",
+  "new": "        \"--restricted\",\n",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "restricted mode dropped",
+  "file": "chat.py",
+  "old": "        \"--safe-mode\", \"--restricted\",\n",
+  "new": "        \"--safe-mode\",\n",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "permission prompts left on",
+  "file": "chat.py",
+  "old": "        \"--permission-prompts\", \"none\",\n",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "permission mode not pinned",
+  "file": "chat.py",
+  "old": "        \"--permission-mode\", \"dontAsk\",\n",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "MCP servers not strict",
+  "file": "chat.py",
+  "old": "        \"--strict-mcp-config\",\n",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "tools widened to Bash",
+  "file": "chat.py",
+  "old": "TOOLS = \"Read,Glob,Grep\"",
+  "new": "TOOLS = \"Read,Glob,Grep,Bash\"",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "budget cap removed",
+  "file": "chat.py",
+  "old": "        \"--max-budget-usd\", BUDGET_USD,\n",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "Grep denials dropped",
+  "file": "chat.py",
+  "old": "DENIED_TOOLS = (\"Read\", \"Grep\", \"Glob\")",
+  "new": "DENIED_TOOLS = (\"Read\", \"Glob\")",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "Glob denials dropped",
+  "file": "chat.py",
+  "old": "DENIED_TOOLS = (\"Read\", \"Grep\", \"Glob\")",
+  "new": "DENIED_TOOLS = (\"Read\", \"Grep\")",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "env file pattern dropped",
+  "file": "chat.py",
+  "old": "\"**/.env*\", ",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "credentials pattern dropped",
+  "file": "chat.py",
+  "old": "\"**/*credentials*\", ",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "API key kept in the environment",
+  "file": "chat.py",
+  "old": "REMOVED_PREFIXES = (\"ANTHROPIC_\", \"CLAUDE_CODE_USE_\")",
+  "new": "REMOVED_PREFIXES = (\"CLAUDE_CODE_USE_\",)",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "session id not checked",
+  "file": "chat.py",
+  "old": "    uuid.UUID(str(session_id))\n",
+  "new": "",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "resume and new session swapped",
+  "file": "chat.py",
+  "old": "\"--resume\" if resume else \"--session-id\"",
+  "new": "\"--session-id\" if resume else \"--resume\"",
+  "tests": [
+   "tests/test_chat_command.py"
+  ]
+ },
+ {
+  "name": "private folders not refused",
+  "file": "chat.py",
+  "old": "    if private_folder(resolved, home):",
+  "new": "    if False:",
+  "tests": [
+   "tests/test_chat_context.py"
+  ]
+ },
+ {
+  "name": "allowed places not checked",
+  "file": "chat.py",
+  "old": "if is_within(resolved, root_real) and (allow_equal or parts_of(resolved) != parts_of(root_real)):",
+  "new": "if True:",
+  "tests": [
+   "tests/test_chat_context.py"
+  ]
+ },
+ {
+  "name": "links not resolved",
+  "file": "chat.py",
+  "old": "        resolved = Path(path).resolve(strict=True)\n    except (OSError, RuntimeError, ValueError):\n        return None, \"That node has no extra folder",
+  "new": "        resolved = Path(os.path.abspath(path))\n        resolved.stat()\n    except (OSError, RuntimeError, ValueError):\n        return None, \"That node has no extra folder",
+  "tests": [
+   "tests/test_chat_context.py"
+  ]
+ },
+ {
+  "name": "project path trusted from the page",
+  "file": "chat.py",
+  "old": "            if target is not None and resolved_or_none(project) == target:\n                match = Path(project)",
+  "new": "            match = Path(path)",
+  "tests": [
+   "tests/test_chat_context.py"
+  ]
+ },
+ {
+  "name": "hostile name reaches the prompt",
+  "file": "chat.py",
+  "old": "        if world.SAFE_NAME.fullmatch(name):\n            return",
+  "new": "        if True:\n            return",
+  "tests": [
+   "tests/test_chat_context.py"
+  ]
+ },
+ {
+  "name": "real Claude folder not protected",
+  "file": "chat.py",
+  "old": "    found = [Path(home), Path.home() / \".claude\"]",
+  "new": "    found = [Path(home)]",
+  "tests": [
+   "tests/test_portable.py"
+  ]
+ },
+ {
+  "name": "tool whitelist removed",
+  "file": "chat.py",
+  "old": "block.get(\"name\") in KNOWN_TOOLS",
+  "new": "True",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "control characters kept in answers",
+  "file": "chat.py",
+  "old": "if character in \"\\n\\t\" or unicodedata.category(character) not in (\"Cc\", \"Cf\", \"Zl\", \"Zp\", \"Cs\")",
+  "new": "if True",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "raw error text forwarded",
+  "file": "chat.py",
+  "old": "    return FIXED_ERRORS[\"generic\"]\n\n\nclass ChatManager",
+  "new": "    return tail[:300]\n\n\nclass ChatManager",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "idle limit off",
+  "file": "chat.py",
+  "old": "if now - last_output > limits[\"idle_seconds\"]:",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py::test_a_silent_process_is_killed_after_the_idle_limit_and_counts_as_a_dollar"
+  ]
+ },
+ {
+  "name": "total limit off",
+  "file": "chat.py",
+  "old": "if now - started > limits[\"total_seconds\"]:",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py::test_a_process_that_talks_but_never_finishes_is_killed_at_the_total_limit"
+  ]
+ },
+ {
+  "name": "killed run not charged",
+  "file": "chat.py",
+  "old": "message_cost = float(limits[\"killed_run_usd\"])",
+  "new": "message_cost = 0.0",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "second message waits instead of being refused",
+  "file": "chat.py",
+  "old": "self.guard.acquire(blocking=False)",
+  "new": "self.guard.acquire()",
+  "tests": [
+   "tests/test_chat_runner.py::test_a_second_message_while_one_runs_is_refused_with_409_and_starts_nothing"
+  ]
+ },
+ {
+  "name": "session spending cap off",
+  "file": "chat.py",
+  "old": "if self.session_cost + self.limits[\"killed_run_usd\"] > self.limits[\"session_cap_usd\"]:",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "session cap can be overshot",
+  "file": "chat.py",
+  "old": "if self.session_cost + self.limits[\"killed_run_usd\"] > self.limits[\"session_cap_usd\"]:",
+  "new": "if self.session_cost > self.limits[\"session_cap_usd\"]:",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "minimum gap off",
+  "file": "chat.py",
+  "old": "if time.monotonic() - self.last_start < self.limits[\"min_gap_seconds\"]:",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "version gate loosened",
+  "file": "chat.py",
+  "old": "if not version or version not in tested:",
+  "new": "if not version:",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "tree kill and job object off",
+  "tests": [
+   "tests/test_chat_runner.py::test_a_process_that_started_its_own_child_loses_the_child_too"
+  ],
+  "edits": [
+   [
+    "chat.py",
+    "            subprocess.run([\"taskkill\", \"/PID\", str(process.pid), \"/T\", \"/F\"], capture_output=True, timeout=15)",
+    "            pass"
+   ],
+   [
+    "chat.py",
+    "        if os.name != \"nt\":\n            return\n\n        class IoCounters",
+    "        return\n\n        class IoCounters"
+   ]
+  ]
+ },
+ {
+  "name": "answer size cap off",
+  "file": "chat.py",
+  "old": "piece, cut = piece[:room], True",
+  "new": "pass",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "follow-up always starts a new session",
+  "file": "chat.py",
+  "old": "resumed and state.messages > 0",
+  "new": "False",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "stop race not handled",
+  "file": "chat.py",
+  "old": "if not reason and result is None and self.stop_event.is_set():",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "API key kept for the child process",
+  "file": "chat.py",
+  "old": "                env=clean_environment(os.environ),\n                creationflags=getattr(subprocess, \"CREATE_NEW_PROCESS_GROUP\"",
+  "new": "                env=os.environ,\n                creationflags=getattr(subprocess, \"CREATE_NEW_PROCESS_GROUP\"",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "heartbeat off",
+  "file": "chat.py",
+  "old": "if now - last_beat >= limits[\"heartbeat_seconds\"]:",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "dropped connection ignored on a heartbeat",
+  "file": "chat.py",
+  "old": "                except OSError:\n                    reason = \"gone\"\n                    break\n            try:\n                raw",
+  "new": "                except OSError:\n                    pass\n            try:\n                raw",
+  "tests": [
+   "tests/test_chat_runner.py::test_a_dropped_connection_is_noticed_on_a_heartbeat_even_when_nothing_is_being_said"
+  ]
+ },
+ {
+  "name": "malformed events crash the stream",
+  "file": "chat.py",
+  "old": "            except (AttributeError, TypeError, KeyError):\n                continue\n",
+  "new": "",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "message not validated",
+  "file": "chat.py",
+  "old": "        text = validate_message(text)\n",
+  "new": "        text = str(text)\n",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "a .cmd shim is accepted as the command",
+  "file": "chat.py",
+  "old": "and Path(wanted).suffix.lower() == \".exe\"",
+  "new": "",
+  "tests": [
+   "tests/test_chat_runner.py"
+  ]
+ },
+ {
+  "name": "chat id not checked",
+  "file": "serve_dashboard.py",
+  "old": "not (isinstance(chat_id, str) and CHAT_ID.fullmatch(chat_id))",
+  "new": "False",
+  "tests": [
+   "tests/test_serve_chat.py"
+  ]
+ },
+ {
+  "name": "chat body limited to the small cap",
+  "file": "serve_dashboard.py",
+  "old": "if length > limit:",
+  "new": "if length > MAX_BODY_BYTES:",
+  "tests": [
+   "tests/test_serve_chat.py"
+  ]
+ },
+ {
+  "name": "server close leaves chat running",
+  "file": "serve_dashboard.py",
+  "old": "            manager.shutdown()",
+  "new": "            pass",
+  "tests": [
+   "tests/test_serve_chat.py"
+  ]
+ },
+ {
+  "name": "node taken from the page without checking the world",
+  "file": "serve_dashboard.py",
+  "old": "        for node in self.server.ensure_world()[\"nodes\"]:\n            if node[\"id\"] == node_id:\n                return node\n        raise Refusal(404,",
+  "new": "        return {\"id\": node_id, \"type\": \"skill\", \"name\": \"x\", \"path\": node_id}\n        raise Refusal(404,",
+  "tests": [
+   "tests/test_serve_chat.py"
+  ]
+ },
+ {
+  "name": "stop endpoint does nothing",
+  "file": "serve_dashboard.py",
+  "old": "self.send_json(200, {\"stopped\": self.server.chat.stop()})",
+  "new": "self.send_json(200, {\"stopped\": False})",
+  "tests": [
+   "tests/test_serve_chat.py"
+  ]
+ },
+ {
+  "name": "report 24 hour cutoff off",
+  "file": "build_dashboard.py",
+  "old": "for stamp, name in files if stamp > recent_cutoff][:RECENT_SHOWN]",
+  "new": "for stamp, name in files][:RECENT_SHOWN]",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "report list cap off",
+  "file": "build_dashboard.py",
+  "old": "if stamp > recent_cutoff][:RECENT_SHOWN]",
+  "new": "if stamp > recent_cutoff]",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "fixed report always recent",
+  "file": "build_dashboard.py",
+  "old": "if stamp > recent_cutoff else []",
+  "new": "if True else []",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "uncommitted lines cap off",
+  "file": "build_dashboard.py",
+  "old": "for line in dirty[:DIRTY_SHOWN]]",
+  "new": "for line in dirty]",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "uncommitted lines not cleaned",
+  "file": "build_dashboard.py",
+  "old": "[plain(line, DIRTY_LINE_CAP) for line in dirty[:DIRTY_SHOWN]]",
+  "new": "[line for line in dirty[:DIRTY_SHOWN]]",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "line length cap off",
+  "file": "build_dashboard.py",
+  "old": "[:cap]",
+  "new": "",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "invisible characters kept",
+  "file": "build_dashboard.py",
+  "old": "if unicodedata.category(c) not in HIDDEN_CATEGORIES",
+  "new": "if True",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "report names not cleaned",
+  "file": "build_dashboard.py",
+  "old": "{\"name\": plain(name, 120), \"when\": when(stamp)} for stamp, name in files",
+  "new": "{\"name\": name, \"when\": when(stamp)} for stamp, name in files",
+  "tests": [
+   "tests/test_today.py"
+  ]
+ }
+]
