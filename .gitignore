@@ -1,0 +1,6 @@
+.demo-world/
+__pycache__/
+.pytest_cache/
+dashboard.html
+tested_claude_version.txt
+*.png.tmp
