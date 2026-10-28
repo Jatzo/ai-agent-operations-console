@@ -2,13 +2,13 @@
   "use strict";
 
   var STYLE = {
-    project: { shape: "hex", radius: 15, color: "#ffb000" },
-    report: { shape: "square", radius: 6, color: "#f3e3c3" },
-    routine: { shape: "ring", radius: 8, color: "#7bd88f" },
-    skill: { shape: "dot", radius: 3, color: "#ffb000" },
-    agent: { shape: "diamond", radius: 5, color: "#f3e3c3" },
-    idea: { shape: "spark", radius: 4, color: "#f3e3c3" },
-    hub: { shape: "ring", radius: 10, color: "#ffb000" }
+    project: { shape: "hex", radius: 15, color: "#2ee6ff", glow: "cyan" },
+    report: { shape: "square", radius: 6, color: "#bcd6f0", glow: "pale" },
+    routine: { shape: "ring", radius: 8, color: "#3dff9a", glow: "green" },
+    skill: { shape: "dot", radius: 3, color: "#2ee6ff", glow: "cyan" },
+    agent: { shape: "diamond", radius: 5, color: "#a78bfa", glow: "violet" },
+    idea: { shape: "spark", radius: 4, color: "#ffb000", glow: "amber" },
+    hub: { shape: "ring", radius: 10, color: "#2ee6ff", glow: "cyan" }
   };
   var LINK = {
     member: { alpha: 0.09, width: 1 },
@@ -18,8 +18,8 @@
     writes: { alpha: 0.4, width: 1.4 },
     idea: { alpha: 0.4, width: 1 }
   };
-  var AMBER = "255,176,0";
-  var CREAM = "243,227,195";
+  var ACCENT = "46,230,255";
+  var GLOWS = { cyan: ACCENT, green: "61,255,154", violet: "167,139,250", amber: "255,176,0", pale: "188,214,240" };
   var FONT = "12px Bahnschrift, 'Cascadia Mono', Consolas, sans-serif";
   var TAU = Math.PI * 2;
 
@@ -48,8 +48,10 @@
   function create(canvas, options) {
     var settings = options || {};
     var context = canvas.getContext("2d");
-    var glowAmber = sprite(AMBER, 64);
-    var glowCream = sprite(CREAM, 64);
+    var glows = {};
+    Object.keys(GLOWS).forEach(function (name) {
+      glows[name] = sprite(GLOWS[name], 64);
+    });
     var nodes = [];
     var edges = [];
     var byId = {};
@@ -360,7 +362,7 @@
       var centre = toScreen(0, 0);
       var maxRadius = Math.max(size.w, size.h) * 2;
       context.save();
-      context.strokeStyle = "rgba(" + AMBER + ",0.07)";
+      context.strokeStyle = "rgba(" + ACCENT + ",0.09)";
       context.lineWidth = 1;
       for (var r = 100; r <= 900; r += 100) {
         context.beginPath();
@@ -373,17 +375,6 @@
       context.moveTo(centre[0], centre[1] - maxRadius);
       context.lineTo(centre[0], centre[1] + maxRadius);
       context.stroke();
-      if (!calm && level >= 3 && typeof context.createConicGradient === "function") {
-        var angle = (clock * 0.0004) % TAU;
-        var gradient = context.createConicGradient(angle, centre[0], centre[1]);
-        gradient.addColorStop(0, "rgba(" + AMBER + ",0.06)");
-        gradient.addColorStop(0.08, "rgba(" + AMBER + ",0)");
-        gradient.addColorStop(1, "rgba(" + AMBER + ",0)");
-        context.fillStyle = gradient;
-        context.beginPath();
-        context.arc(centre[0], centre[1], 920 * camera.z, 0, TAU);
-        context.fill();
-      }
       context.restore();
     }
 
@@ -411,7 +402,7 @@
           context.moveTo(a[0], a[1]);
           context.quadraticCurveTo(cp[0], cp[1], b[0], b[1]);
         });
-        context.strokeStyle = "rgba(" + AMBER + "," + (focus ? style.alpha * 0.3 : style.alpha) + ")";
+        context.strokeStyle = "rgba(" + ACCENT + "," + (focus ? style.alpha * 0.3 : style.alpha) + ")";
         context.lineWidth = style.width;
         context.stroke();
       });
@@ -425,7 +416,7 @@
           context.moveTo(a[0], a[1]);
           context.quadraticCurveTo(cp[0], cp[1], b[0], b[1]);
         });
-        context.strokeStyle = "rgba(" + AMBER + ",0.95)";
+        context.strokeStyle = "rgba(" + ACCENT + ",0.95)";
         context.lineWidth = 1.8;
         context.stroke();
       }
@@ -453,7 +444,7 @@
         var point = pointOn(curve(edge), pulse.back ? 1 - pulse.t : pulse.t);
         var screen = toScreen(point[0], point[1]);
         var half = 7 * Math.max(Math.min(camera.z, 1.4), 0.6);
-        context.drawImage(glowAmber, screen[0] - half, screen[1] - half, half * 2, half * 2);
+        context.drawImage(glows.cyan, screen[0] - half, screen[1] - half, half * 2, half * 2);
       });
     }
 
@@ -508,7 +499,7 @@
         if (level >= 2 && (used || node.type === "project" || node.type === "hub" || i === selected || i === hovered) && (!focus || focus.has(i))) {
           var halo = r * (node.type === "project" ? 5 : 2.6);
           context.globalAlpha = Math.min(alpha, node.type === "project" ? 0.8 : 0.45);
-          context.drawImage(node.type === "agent" || node.type === "report" ? glowCream : glowAmber, s[0] - halo, s[1] - halo, halo * 2, halo * 2);
+          context.drawImage(glows[style.glow], s[0] - halo, s[1] - halo, halo * 2, halo * 2);
         }
         context.globalAlpha = alpha;
         path(node, s[0], s[1], r);
@@ -522,7 +513,7 @@
         }
         if (i === selected) {
           context.globalAlpha = 1;
-          context.strokeStyle = "#ffffff";
+          context.strokeStyle = "#f2fbff";
           context.lineWidth = 1.5;
           context.beginPath();
           context.arc(s[0], s[1], r + 6, 0, TAU);
@@ -551,9 +542,9 @@
           return;
         }
         placed.push(box);
-        context.fillStyle = "rgba(11,9,5,0.78)";
+        context.fillStyle = "rgba(5,8,16,0.82)";
         context.fillRect(label.x - width / 2 - 4, label.y - 12, width + 8, 16);
-        context.fillStyle = label.priority === 0 ? "#ffffff" : "#" + (label.node.type === "routine" ? "7bd88f" : "f3e3c3");
+        context.fillStyle = label.priority === 0 ? "#f2fbff" : label.node.type === "routine" ? "#3dff9a" : "#bcd6f0";
         context.fillText(text, label.x, label.y);
       });
     }
