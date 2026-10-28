@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="os-token" content="{{token}}">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#050810">
 <title>AI agent operations console</title>
 <link rel="stylesheet" href="/app.css">
 </head>
@@ -38,6 +39,12 @@
 </div>
 </nav>
 </header>
+<div class="strip" id="strip" role="group" aria-label="Server facts">
+<span>127.0.0.1 only</span>
+<span class="ok">Read only</span>
+<span id="strip-updated">Loading</span>
+<span id="strip-problems">0 problems</span>
+</div>
 <p class="banner" id="banner" role="alert" hidden></p>
 <main>
 <section id="today-view" role="tabpanel" aria-labelledby="tab-today">

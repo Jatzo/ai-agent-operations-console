@@ -362,6 +362,9 @@
     }
     nodes.banner.hidden = problems.length === 0;
     nodes.banner.textContent = problems.join(" ");
+    $("strip-updated").textContent = "Updated " + data.generated;
+    $("strip-problems").textContent = problems.length + (problems.length === 1 ? " problem" : " problems");
+    $("strip-problems").className = problems.length ? "bad" : "";
   }
 
   function loadOverview(fresh) {

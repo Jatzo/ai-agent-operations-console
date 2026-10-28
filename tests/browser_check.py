@@ -56,6 +56,10 @@ def painted(page):
     )
 
 
+def running_animations(page):
+    return page.evaluate("document.getAnimations().filter(a => a.playState === 'running').length")
+
+
 def new_page(browser, address, width, height, reduced="no-preference", view="world"):
     context = browser.new_context(viewport={"width": width, "height": height}, reduced_motion=reduced)
     context.grant_permissions(["clipboard-read", "clipboard-write"], origin=address)
@@ -84,6 +88,11 @@ def today_checks(browser, address, out, width, height, temp_inbox):
     for name in ("today-dirty", "today-reports", "today-ideas"):
         check(page.locator(f"#{name} .card").count() >= 1, f"{label}: {name} shows at least a card or a plain empty message")
     check("Latest added first" in page.inner_text("#today-ideas"), f"{label}: the inbox says how it is ordered")
+    strip = page.inner_text("#strip") if page.is_visible("#strip") else ""
+    if width > 720:
+        check(all(word in strip.lower() for word in ("127.0.0.1 only", "read only", "updated", "problem")), f"{label}: the status strip states the server facts ({strip!r})")
+    else:
+        check(not page.is_visible("#strip"), f"{label}: the status strip is hidden on a phone")
     wait_until(lambda: page.locator("#today-view .card .tool").count() >= 1, 60)
     page.screenshot(path=str(out / f"today-{width}.png"), full_page=True)
     check(page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0, f"{label}: no sideways scroll")
@@ -183,6 +192,7 @@ def world_checks(browser, address, out, width, height, temp_inbox, first):
     a = draws(page)
     time.sleep(1.5)
     check(draws(page) == a, f"{label}: in Calm nothing is redrawn while idle ({a} draws)")
+    check(running_animations(page) == 0, f"{label}: in Calm no animation is running")
     page.screenshot(path=str(out / f"world-calm-{width}.png"))
     page.click("#calm")
     time.sleep(0.5)
@@ -371,6 +381,7 @@ def reduced_motion_check(browser, address):
     a = draws(page)
     time.sleep(1.5)
     check(draws(page) == a, "reduced motion: nothing is redrawn while idle")
+    check(running_animations(page) == 0, "reduced motion: no animation is running")
     context.close()
 
 
