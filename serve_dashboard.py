@@ -72,9 +72,6 @@ class Refusal(Exception):
         self.message = message
 
 
-project_id = world.project_id
-
-
 def build_overview(index_dir):
     now = time.time()
     text, problem = overview.read_index(index_dir)
@@ -84,7 +81,7 @@ def build_overview(index_dir):
         try:
             for label, path in overview.parse_projects(text):
                 card = overview.read_project(label, path, now)
-                card["id"] = project_id(label, path)
+                card["id"] = world.project_id(label, path)
                 projects.append(card)
         except overview.CouldNotRead as error:
             problems.append(str(error))
@@ -115,7 +112,7 @@ def project_detail(index_dir, wanted_id):
         projects = overview.parse_projects(text)
     except overview.CouldNotRead:
         return None
-    match = next(((label, path) for label, path in projects if project_id(label, path) == wanted_id), None)
+    match = next(((label, path) for label, path in projects if world.project_id(label, path) == wanted_id), None)
     if match is None:
         return None
     label, folder = match

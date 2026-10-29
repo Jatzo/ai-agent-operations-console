@@ -247,21 +247,21 @@ MESSAGE_CAP = 4000
 LIMITS = {
     "total_seconds": 300, "idle_seconds": 90, "heartbeat_seconds": 10, "min_gap_seconds": 1.0,
     "session_cap_usd": 5.0, "killed_run_usd": 1.0, "text_cap": 200_000, "line_cap": 1_048_576,
-    "stderr_keep": 4096, "chats_kept": 20, "version_check_seconds": 30, "version_cache_seconds": 60,
+    "stderr_keep": 4096, "chats_kept": 20, "version_check_seconds": 30, "version_cache_seconds": 60, "failed_version_seconds": 5,
     "kill_seconds": 15, "exit_wait_seconds": 10,
 }
 KNOWN_TOOLS = {"Read", "Glob", "Grep"}
 FIXED_ERRORS = {
     "signin": "Claude Code says you are not signed in. Open the Claude app, sign in, then try again.",
     "billing": "Claude reports a usage or billing limit. Try again later.",
-    "budget": "This message reached its spending limit, so it stopped.",
+    "budget": "This message reached its spending limit, so it stopped. Ask a narrower question.",
     "timeout": "Claude took too long, so it was stopped. Ask a narrower question.",
     "silent": "Claude went quiet, so it was stopped. Send the message again.",
     "missing": "Claude Code was not found on this computer. Install it and sign in, then reload this page.",
     "version": "Claude Code was updated. Run the chat gate check first.",
     "generic": "Claude Code stopped with an error. Send the message again.",
     "empty": "Claude returned nothing. Try again.",
-    "cut": f"The answer was cut at {LIMITS['text_cap']:,} characters.",
+    "cut": f"The answer was cut at {LIMITS['text_cap']:,} characters. Ask for a shorter answer.",
 }
 
 
@@ -331,7 +331,13 @@ JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9  # the information class SetInformatio
 
 
 class JobObject:
-    """A Windows job that kills everything still inside it when closed, so no Claude process can outlive the server."""
+    """A Windows job that kills everything still inside it when closed, so no Claude process can outlive the server.
+
+    The process joins the job just after it starts, so a grandchild it starts in that gap is outside the job. Starting
+    the process suspended would close the gap, but a failure between the start and the resume would leave a process
+    that never runs. kill_tree still ends the gap grandchild, through its parent while that is still running, when a message
+    stops or finishes.
+    """
 
     def __init__(self):
         self.handle = None
@@ -435,15 +441,24 @@ class ChatManager:
         self.last_start = 0.0
         self.current_label = ""
         self.version_cache = ("", 0.0)
+        self.version_lock = threading.Lock()
+
+    def version_is_fresh(self):
+        """A good answer is kept for a minute and a failed check for a few seconds, so a stuck install is not asked again by every poll."""
+        value, stamp = self.version_cache
+        limit = self.limits["version_cache_seconds"] if value else self.limits["failed_version_seconds"]
+        return stamp > 0 and time.monotonic() - stamp < limit
 
     def current_version(self):
-        value, stamp = self.version_cache
-        if value and time.monotonic() - stamp < self.limits["version_cache_seconds"]:
-            return value
-        provider = self.version_provider
-        found = provider() if provider else read_version(self.executable or find_executable())
-        self.version_cache = (found, time.monotonic())
-        return found
+        if self.version_is_fresh():
+            return self.version_cache[0]
+        with self.version_lock:
+            if self.version_is_fresh():
+                return self.version_cache[0]
+            provider = self.version_provider
+            found = provider() if provider else read_version(self.executable or find_executable())
+            self.version_cache = (found, time.monotonic())
+            return found
 
     def status(self):
         problem, version = "", ""
@@ -685,9 +700,13 @@ class ChatManager:
                         state.messages += 1
                         if cut:
                             send({"t": "error", "message": FIXED_ERRORS["cut"]})
+                        try:
+                            turns = int(result.get("num_turns") or 0)
+                        except (TypeError, ValueError, OverflowError):
+                            turns = 0
                         send({
                             "t": "done", "cost": round(message_cost, 4), "chat_cost": round(state.cost, 4),
-                            "session_cost": round(self.session_cost, 4), "turns": int(result.get("num_turns") or 0),
+                            "session_cost": round(self.session_cost, 4), "turns": turns,
                         })
         except OSError:
             pass

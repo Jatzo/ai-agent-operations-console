@@ -195,6 +195,57 @@ def test_the_chat_will_not_start_when_the_index_folder_is_the_private_claude_fol
     assert not (lab.tmp / "pid.txt").exists()
 
 
+@pytest.mark.parametrize("turns", ['"x"', "[1]", "Infinity", "null"], ids=["text", "list", "infinity", "null"])
+def test_an_odd_turn_count_still_ends_with_a_done_event_not_a_crash(lab, monkeypatch, turns):
+    monkeypatch.setenv("FAKE_SCENARIO", "odd_turns")
+    monkeypatch.setenv("FAKE_TURNS", turns)
+    events = ask(manager(lab))
+
+    assert events[-1]["t"] == "done" and events[-1]["turns"] == 0
+
+
+def test_two_status_polls_at_once_start_one_version_check(lab):
+    calls = []
+
+    def slow_version():
+        calls.append(1)
+        time.sleep(0.4)
+        return "1.2.3"
+
+    mgr = chat.ChatManager(
+        lab.index_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
+        version=slow_version, tested=lambda: {"1.2.3"},
+    )
+    threads = [threading.Thread(target=mgr.status) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(calls) == 1
+
+
+def test_a_failed_version_check_is_not_repeated_by_every_poll_waiting_behind_it(lab):
+    calls = []
+
+    def failing_version():
+        calls.append(1)
+        time.sleep(0.3)
+        return ""
+
+    mgr = chat.ChatManager(
+        lab.index_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
+        version=failing_version, tested=lambda: {"1.2.3"},
+    )
+    threads = [threading.Thread(target=mgr.status) for _ in range(3)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(calls) == 1
+
+
 def test_a_budget_stop_gives_the_fixed_message_and_the_cost_still_counts(lab, monkeypatch):
     monkeypatch.setenv("FAKE_SCENARIO", "budget")
     mgr = manager(lab)

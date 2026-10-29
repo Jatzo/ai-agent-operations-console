@@ -73,6 +73,9 @@ elif scenario == "stderr_secret":
 elif scenario == "crash_after_work":
     delta("Partial answer.")
     sys.exit(3)
+elif scenario == "odd_turns":
+    delta("Fine.")
+    result(result="Fine.", num_turns=json.loads(os.environ["FAKE_TURNS"]))
 elif scenario == "budget":
     delta("Part ")
     result(subtype="error_max_budget_usd", is_error=True, total_cost_usd=1.01)

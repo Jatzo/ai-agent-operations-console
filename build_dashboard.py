@@ -223,8 +223,10 @@ def read_report(label, location, fixed, now, pattern="*"):
                 raise CouldNotRead(f"{location} does not exist or is not a folder")
             files = []
             for entry in location.iterdir():
-                if fnmatch.fnmatch(entry.name, pattern) and entry.is_file() and entry.stat().st_mtime > cutoff:
-                    files.append((entry.stat().st_mtime, entry.name))
+                if fnmatch.fnmatch(entry.name, pattern) and entry.is_file():
+                    modified = entry.stat().st_mtime
+                    if modified > cutoff:
+                        files.append((modified, entry.name))
             files.sort(reverse=True)
             card.update(
                 kind="folder",
