@@ -2,6 +2,8 @@
 
 # AI agent operations console
 
+[![tests](https://github.com/Jatzo/ai-agent-operations-console/actions/workflows/tests.yml/badge.svg)](https://github.com/Jatzo/ai-agent-operations-console/actions/workflows/tests.yml)
+
 Built for my own business. Published as an example version with demo data.
 
 A local page that shows your work folders, reports, skills and agents as a map, opens on what needs you today,
@@ -11,6 +13,32 @@ It runs on your computer only. It reads folders and git, and writes one thing: a
 you add an idea.
 
 ![A 15 second tour of the demo: the Today page, the map, the read-only chat and the safety controls](docs/img/console-tour.gif)
+
+## What is proven, and how to check it
+
+Start with the write-up: [Running Claude Code read only from a web page, and how I tested it](docs/WRITEUP.md). Then
+check it yourself.
+
+| What is claimed | The command that shows it |
+|---|---|
+| Over 450 tests pass, and none of them calls the real Claude Code | `python -m pytest tests --ignore=tests/browser_check.py` |
+| 61 protections, each broken on purpose, are each caught by a test | `python tools\mutation_check.py` |
+| The real Claude Code, in a throwaway folder with decoy secrets, cannot change, escape or leak | `python tests\chat_gate.py` (about 7 cents) |
+| The page works at phone and desktop width with no console errors | `python tests\browser_check.py shots` |
+| All of that in one table | `python tools\prove.py` |
+
+[Try to break it](docs/ATTACKS.md) lists each attack, what stops it and the test that fails if it stops working.
+
+## How it is built
+
+```mermaid
+flowchart LR
+    Page["Browser page"] -->|"token, Host and Origin checked"| Server["Local server on 127.0.0.1"]
+    Server -->|"reads"| Folders["Your folders, git and the Claude folder"]
+    Server -->|"writes one line"| Inbox["INBOX.md"]
+    Server -->|"one message at a time"| Claude["Claude Code: three read-only tools, safe mode, time and cost limits"]
+    Claude -->|"reads files, never secrets"| Folders
+```
 
 ## Try it in one command
 
@@ -103,7 +131,7 @@ the gate once for the version you have installed:
 python tests\chat_gate.py
 ```
 
-The gate sends about a dozen small real messages (about 5 pence, $0.06, of usage when it was last run) in a throwaway
+The gate sends about a dozen small real messages (about 6 pence, $0.07, of usage when it was last run) in a throwaway
 folder with decoy secrets, checks that Claude Code cannot change anything, read outside its folder or read secret
 files, and only then writes `tested_claude_version.txt`. Update Claude Code and the chat switches itself off until
 you run the gate again. `python tests\chat_gate.py --small` sends one message to show the stream format and cost.
@@ -119,6 +147,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests --ignore=tests/browser_check.py
 python tests\browser_check.py shots
 python tools\mutation_check.py
+python tools\prove.py
 ```
 
 - `pytest` runs the unit and server tests. None of them calls the real Claude Code: they use `tests/fake_claude.py`.
@@ -126,6 +155,8 @@ python tools\mutation_check.py
   detector command to run one; otherwise that step is skipped.
 - `mutation_check.py` breaks each protection on purpose, on a temporary copy, and checks that a test fails. See the
   write-up for what that proves and what it does not.
+- `prove.py` runs the unit tests and the browser checks and prints one table with every figure read from the run. Add
+  `--mutation` to include the mutation checker, which takes roughly half an hour. It never runs the real-Claude gate.
 
 ## What is where
 
@@ -136,7 +167,8 @@ python tools\mutation_check.py
 | `world.py`, `build_dashboard.py` | Reads folders, git, skills, agents and history into the map and the Today page. |
 | `web/` | The page. No outside addresses, no inline script, text set with `textContent` only. |
 | `demo.py`, `demo_claude.py` | The made-up world and the canned chat. |
-| `tests/`, `tools/` | Tests, the gate, the mutation checker and the screenshot script. |
+| `tests/`, `tools/` | Tests, the gate, the mutation checker, the one-table proof tool and the screenshot script. |
+| `docs/` | The write-up, the attack table, the setup prompt and the pictures. |
 
 ## Limits
 
