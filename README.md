@@ -32,11 +32,11 @@ check it yourself.
 ## How it is built
 
 ```mermaid
-flowchart LR
-    Page["Browser page"] -->|"token, Host and Origin checked"| Server["Local server on 127.0.0.1"]
-    Server -->|"reads"| Folders["Your folders, git and the Claude folder"]
+flowchart TD
+    Page["Browser page"] -->|"token, Host, Origin"| Server["Local server, 127.0.0.1 only"]
+    Server -->|"reads"| Folders["Your folders, git, Claude folder"]
     Server -->|"writes one line"| Inbox["INBOX.md"]
-    Server -->|"one message at a time"| Claude["Claude Code: three read-only tools, safe mode, time and cost limits"]
+    Server -->|"one message at a time"| Claude["Claude Code: 3 read-only tools, safe mode, limits"]
     Claude -->|"reads files, never secrets"| Folders
 ```
 
