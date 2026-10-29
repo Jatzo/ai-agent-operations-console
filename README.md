@@ -50,7 +50,7 @@ python demo.py
 
 This builds a made-up world (four projects, a dozen skills, three agents, a routine, some history) in
 `.demo-world`, starts the server and opens your browser. The chat in the demo is answered by a canned script, so
-nothing is sent anywhere and nothing is spent. `start.cmd` does the same.
+nothing is sent anywhere and nothing is spent. `start.ps1` (PowerShell) and `start.cmd` do the same.
 
 ![World](docs/img/world.png)
 ![Chat](docs/img/chat.png)

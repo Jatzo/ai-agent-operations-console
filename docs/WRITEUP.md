@@ -94,10 +94,13 @@ cut so it no longer resolved; "Copy as command" could pass a double quote throug
 and two limits, of the token and of short Windows file names, were not written down (see below).
 
 I fixed all 33 numbered findings. Each fix that changes behaviour has a test that fails without it. Ten smaller
-ones I did not fix: three from the first review (a non-numeric turn count arriving mid-stream, two version checks
-running at once, a tiny gap before a new process joins its job) and seven from the second (a repeated curve-drawing
-loop, one message that replaces every 403, an undocumented launcher, a file read twice per report, two messages with
-no next step, an alias, a value returned from a promise). None of them changes what the console does.
+findings were left unfixed at first. I have since fixed nine: a turn count that was not a number could crash a stream, two
+version checks could run at once, a drawing loop was repeated, one message replaced every 403, a launcher was
+undocumented, a file was read twice per report, two messages gave no next step, an alias was not needed, and a promise
+returned a value it should not. The tenth I chose not to change. A new process joins its job object a moment after it
+starts, so a grandchild started in that gap is outside the job. Starting the process suspended would close the gap,
+but a failure between the start and the resume would leave a process that never runs, which is worse. The code says
+so, and the process tree is still ended through its parent while that is still running.
 
 ## What this does not prove
 
