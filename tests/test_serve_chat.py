@@ -325,7 +325,7 @@ def test_without_a_tested_version_chat_is_refused_by_the_endpoint(tmp_path, monk
 
 def test_the_real_manager_refuses_when_the_version_file_is_missing(tmp_path):
     index_dir = make_index_dir(tmp_path, [], [])
-    server = serve_dashboard.make_server(index_dir, ports=[0], home=tmp_path / "home")
+    server = serve_dashboard.make_server(index_dir, ports=[0], home=tmp_path / "home", gate_file=tmp_path / "no-such-file.txt")
     try:
         assert server.chat.status()["ready"] is False
     finally:
