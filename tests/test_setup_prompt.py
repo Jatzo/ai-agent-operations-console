@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import build_dashboard
+import build_dashboard as overview
 
 PROMPT = Path(__file__).resolve().parent.parent / "docs" / "SETUP_PROMPT.md"
 
@@ -23,8 +23,8 @@ def test_the_layout_in_the_setup_prompt_is_one_the_page_can_read():
     layout = layout.replace("<name>", "Weekly").replace("<when>", "Mondays")
     layout = layout.replace("<full path, with YYYY-MM-DD in place of the date if it has one>", "C:/work/reports/YYYY-MM-DD.md")
 
-    projects = build_dashboard.parse_projects(layout)
-    reports = build_dashboard.parse_reports(layout)
+    projects = overview.parse_projects(layout)
+    reports = overview.parse_reports(layout)
 
     assert projects == [("Atlas", Path("C:/work/Atlas"))]
     assert reports == [("Weekly", Path("C:/work/reports"), False, "*.md")]
@@ -47,6 +47,6 @@ def test_the_inbox_text_in_the_setup_prompt_is_a_file_the_page_can_read(tmp_path
     inbox = prompt_text().split("INBOX.md must be exactly:")[1].split("When both files are written")[0].strip()
     (tmp_path / "INBOX.md").write_text(inbox + "\n- a first idea\n", encoding="utf-8")
 
-    ideas, problem = build_dashboard.read_inbox(tmp_path / "INBOX.md")
+    ideas, problem = overview.read_inbox(tmp_path / "INBOX.md")
 
     assert problem is None and ideas == ["a first idea"]

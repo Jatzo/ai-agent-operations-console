@@ -2,13 +2,13 @@
   "use strict";
 
   var STYLE = {
-    project: { shape: "hex", radius: 15, color: "#2ee6ff", glow: "cyan" },
-    report: { shape: "square", radius: 6, color: "#bcd6f0", glow: "pale" },
-    routine: { shape: "ring", radius: 8, color: "#3dff9a", glow: "green" },
-    skill: { shape: "dot", radius: 3, color: "#2ee6ff", glow: "cyan" },
-    agent: { shape: "diamond", radius: 5, color: "#a78bfa", glow: "violet" },
-    idea: { shape: "spark", radius: 4, color: "#ffb000", glow: "amber" },
-    hub: { shape: "ring", radius: 10, color: "#2ee6ff", glow: "cyan" }
+    project: { shape: "hex", radius: 15, tone: "accent" },
+    report: { shape: "square", radius: 6, tone: "pale" },
+    routine: { shape: "ring", radius: 8, tone: "green" },
+    skill: { shape: "dot", radius: 3, tone: "accent" },
+    agent: { shape: "diamond", radius: 5, tone: "violet" },
+    idea: { shape: "spark", radius: 4, tone: "amber" },
+    hub: { shape: "ring", radius: 10, tone: "accent" }
   };
   var LINK = {
     member: { alpha: 0.09, width: 1 },
@@ -18,8 +18,11 @@
     writes: { alpha: 0.4, width: 1.4 },
     idea: { alpha: 0.4, width: 1 }
   };
-  var ACCENT = "46,230,255";
-  var GLOWS = { cyan: ACCENT, green: "61,255,154", violet: "167,139,250", amber: "255,176,0", pale: "188,214,240" };
+  var SAMPLE_FRAMES = 45;
+  var SLOW_FRAME_MS = 28;
+  var PULSES_FULL = 70;
+  var PULSES_REDUCED = 24;
+  var TONES = ["accent", "green", "violet", "amber", "pale"];
   var FONT = "12px Bahnschrift, 'Cascadia Mono', Consolas, sans-serif";
   var TAU = Math.PI * 2;
 
@@ -45,12 +48,29 @@
     return canvas;
   }
 
+  function readLook() {
+    var style = getComputedStyle(document.documentElement);
+    var look = {};
+    ["accent", "green", "violet", "amber", "pale", "ink", "bg"].forEach(function (name) {
+      look[name] = style.getPropertyValue("--" + name).trim() || "#ffffff";
+    });
+    return look;
+  }
+
+  function channels(hex) {
+    return [1, 3, 5].map(function (start) {
+      return parseInt(hex.slice(start, start + 2), 16);
+    }).join(",");
+  }
+
   function create(canvas, options) {
     var settings = options || {};
     var context = canvas.getContext("2d");
+    var look = readLook();
+    var ACCENT = channels(look.accent);
     var glows = {};
-    Object.keys(GLOWS).forEach(function (name) {
-      glows[name] = sprite(GLOWS[name], 64);
+    TONES.forEach(function (name) {
+      glows[name] = sprite(channels(look[name]), 64);
     });
     var nodes = [];
     var edges = [];
@@ -70,12 +90,10 @@
     var drag = null;
     var dirty = true;
     var settled = false;
-    var frames = 0;
     var draws = 0;
     var active = true;
     var frameTimes = [];
     var lastFrame = 0;
-    var fps = 0;
     var clock = 0;
 
     function nodeIndex(id) {
@@ -426,7 +444,7 @@
       if (calm || level < 2 || !pulseEdges.length) {
         return;
       }
-      var wanted = Math.min(level >= 3 ? 70 : 24, pulseEdges.length);
+      var wanted = Math.min(level >= 3 ? PULSES_FULL : PULSES_REDUCED, pulseEdges.length);
       while (pulses.length < wanted) {
         pulses.push({ edge: pulseEdges[Math.floor(Math.random() * pulseEdges.length)], t: Math.random(), speed: 0.0003 + Math.random() * 0.0006, back: Math.random() > 0.5 });
       }
@@ -444,7 +462,7 @@
         var point = pointOn(curve(edge), pulse.back ? 1 - pulse.t : pulse.t);
         var screen = toScreen(point[0], point[1]);
         var half = 7 * Math.max(Math.min(camera.z, 1.4), 0.6);
-        context.drawImage(glows.cyan, screen[0] - half, screen[1] - half, half * 2, half * 2);
+        context.drawImage(glows.accent, screen[0] - half, screen[1] - half, half * 2, half * 2);
       });
     }
 
@@ -499,21 +517,21 @@
         if (level >= 2 && (used || node.type === "project" || node.type === "hub" || i === selected || i === hovered) && (!focus || focus.has(i))) {
           var halo = r * (node.type === "project" ? 5 : 2.6);
           context.globalAlpha = Math.min(alpha, node.type === "project" ? 0.8 : 0.45);
-          context.drawImage(glows[style.glow], s[0] - halo, s[1] - halo, halo * 2, halo * 2);
+          context.drawImage(glows[style.tone], s[0] - halo, s[1] - halo, halo * 2, halo * 2);
         }
         context.globalAlpha = alpha;
         path(node, s[0], s[1], r);
         if (style.shape === "ring" || style.shape === "spark") {
-          context.strokeStyle = style.color;
+          context.strokeStyle = look[style.tone];
           context.lineWidth = style.shape === "spark" ? 1.2 : 1.8;
           context.stroke();
         } else {
-          context.fillStyle = style.color;
+          context.fillStyle = look[style.tone];
           context.fill();
         }
         if (i === selected) {
           context.globalAlpha = 1;
-          context.strokeStyle = "#f2fbff";
+          context.strokeStyle = look.ink;
           context.lineWidth = 1.5;
           context.beginPath();
           context.arc(s[0], s[1], r + 6, 0, TAU);
@@ -542,9 +560,9 @@
           return;
         }
         placed.push(box);
-        context.fillStyle = "rgba(5,8,16,0.82)";
+        context.fillStyle = "rgba(" + channels(look.bg) + ",0.82)";
         context.fillRect(label.x - width / 2 - 4, label.y - 12, width + 8, 16);
-        context.fillStyle = label.priority === 0 ? "#f2fbff" : label.node.type === "routine" ? "#3dff9a" : "#bcd6f0";
+        context.fillStyle = label.priority === 0 ? look.ink : label.node.type === "routine" ? look.green : look.pale;
         context.fillText(text, label.x, label.y);
       });
     }
@@ -579,11 +597,10 @@
 
     function monitor(now) {
       frameTimes.push(now);
-      if (frameTimes.length > 45) {
+      if (frameTimes.length > SAMPLE_FRAMES) {
         frameTimes.shift();
         var span = frameTimes[frameTimes.length - 1] - frameTimes[0];
-        fps = Math.round((44 / span) * 1000);
-        if (span / 44 > 28 && level > 0 && !calm) {
+        if (span / (SAMPLE_FRAMES - 1) > SLOW_FRAME_MS && level > 0 && !calm) {
           level -= 1;
           frameTimes = [];
         }
@@ -595,7 +612,6 @@
         requestAnimationFrame(tick);
         return;
       }
-      frames += 1;
       var moving = !calm && level >= 1;
       if (moving || dirty || fly || !settled) {
         draw(now);
@@ -729,9 +745,6 @@
         refreshPulseEdges();
         dirty = true;
         canvas.classList.toggle("over", index >= 0);
-        if (settings.onHover) {
-          settings.onHover(index >= 0 ? nodes[index] : null);
-        }
       }
     });
     canvas.addEventListener("pointerup", function (event) {
@@ -752,9 +765,6 @@
         hovered = -1;
         refreshPulseEdges();
         dirty = true;
-        if (settings.onHover) {
-          settings.onHover(null);
-        }
       }
     });
     canvas.addEventListener("dblclick", function (event) {
@@ -839,9 +849,6 @@
         }
         return out;
       },
-      stats: function () {
-        return { fps: fps, level: level, frames: frames, nodes: nodes.length, edges: edges.length, settled: settled, calm: calm, zoom: camera.z };
-      },
       setActive: function (flag) {
         active = Boolean(flag);
         frameTimes = [];
@@ -850,5 +857,5 @@
     };
   }
 
-  window.OSGraph = { create: create };
+  window.ConsoleGraph = { create: create };
 }());

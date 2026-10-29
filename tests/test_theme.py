@@ -22,11 +22,11 @@ def contrast(first, second):
 
 # Pairs the page really draws: text on a panel, coloured text on a panel, dark text on a filled control.
 TEXT_PAIRS = [
-    ("text", "bg"), ("text", "panel"), ("text", "panel-2"),
-    ("quiet", "bg"), ("quiet", "panel"), ("quiet", "panel-2"),
-    ("accent", "bg"), ("accent", "panel"), ("accent", "panel-2"),
-    ("green", "bg"), ("green", "panel"), ("violet", "panel"), ("amber", "panel"),
-    ("alert", "bg"), ("alert", "panel"), ("alert", "panel-2"),
+    ("text", "bg"), ("text", "panel"),
+    ("quiet", "bg"), ("quiet", "panel"),
+    ("accent", "bg"), ("accent", "panel"),
+    ("green", "bg"), ("green", "panel"), ("violet", "panel"), ("amber", "panel"), ("pale", "bg"), ("ink", "bg"),
+    ("alert", "bg"), ("alert", "panel"),
     ("bg", "accent"),
 ]
 

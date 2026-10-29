@@ -1,14 +1,15 @@
 (function () {
   "use strict";
 
-  var token = document.querySelector('meta[name="os-token"]').content;
+  var token = document.querySelector('meta[name="console-token"]').content;
   var NAME_OK = /^[a-z0-9:_-]{1,64}$/;
   var PATH_OK = /^[A-Za-z]:[\\/][A-Za-z0-9 _.'\-\\/]{1,200}$/;
   var TYPES = [["project", "⬢", "Projects"], ["report", "■", "Reports"], ["routine", "○", "Routines"], ["skill", "•", "Skills"], ["agent", "◆", "Agents"], ["idea", "✦", "Ideas"]];
   var $ = function (id) {
     return document.getElementById(id);
   };
-  var nodes = {
+  var LINKS_SHOWN = 40;
+  var elements = {
     banner: $("banner"),
     q: $("q"),
     results: $("results"),
@@ -39,7 +40,6 @@
   var VIEWS = ["today", "world", "cards"];
   var currentView = "today";
   var VERBS = { Read: "Reading", Glob: "Listing", Grep: "Searching" };
-  var CHIP_TAIL = "read only · Sonnet · files Claude reads are sent to Anthropic";
   var kept = {};
   var chat = {
     node: null,
@@ -54,8 +54,17 @@
     chip: $("chat-chip"),
     cost: $("chat-cost"),
     problem: $("chat-problem"),
+    model: "",
     orphan: null
   };
+
+  function lastDays() {
+    return overviewData ? "last " + overviewData.window_days + " days" : "recent days";
+  }
+
+  function chipTail() {
+    return "read only · " + (chat.model ? chat.model + " · " : "") + "files Claude reads are sent to Anthropic";
+  }
 
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -105,30 +114,38 @@
     return error.message;
   }
 
-  function api(path, options) {
+  function request(path, options) {
     var settings = options || {};
-    settings.headers = Object.assign({ "X-OS-Token": token }, settings.headers || {});
+    settings.headers = Object.assign({ "X-Console-Token": token }, settings.headers || {});
     return fetch(path, settings).then(function (response) {
+      if (response.ok) {
+        return response;
+      }
       return response.json().catch(function () {
         return {};
       }).then(function (data) {
-        if (!response.ok) {
-          var error = new Error(data.error || "Something went wrong. Try Refresh.");
-          error.status = response.status;
-          throw error;
-        }
-        return data;
+        var error = new Error(data.error || "Something went wrong. Try again.");
+        error.status = response.status;
+        throw error;
+      });
+    });
+  }
+
+  function api(path, options) {
+    return request(path, options).then(function (response) {
+      return response.json().catch(function () {
+        return {};
       });
     });
   }
 
   function say(message) {
-    nodes.live.textContent = message;
+    elements.live.textContent = message;
   }
 
   function showError(error) {
-    nodes.banner.hidden = false;
-    nodes.banner.textContent = explain(error);
+    elements.banner.hidden = false;
+    elements.banner.textContent = explain(error);
   }
 
   function copyText(text) {
@@ -200,7 +217,9 @@
     var button = element("button", "tool", "Add");
     var status = element("p", "note");
     input.type = "text";
-    input.maxLength = 300;
+    if (overviewData) {
+      input.maxLength = overviewData.idea_chars;
+    }
     input.autocomplete = "off";
     input.id = "idea-world";
     label.htmlFor = input.id;
@@ -235,7 +254,7 @@
         parts.push(element("p", "note", "Nothing uncommitted."));
       }
     } else {
-      parts.push(element("h4", "", "Changed files, last 7 days"));
+      parts.push(element("h4", "", "Changed files, " + lastDays()));
       if (detail.files.length) {
         parts.push(list(detail.files.map(function (file) {
           return [file.path + " ", element("span", "when", file.date)];
@@ -308,12 +327,12 @@
     heading.append(button);
     article.append(heading);
     if (card.kind === "git") {
-      article.append(figures([["Commits, last 7 days", card.commits], ["Uncommitted files", card.uncommitted]]));
+      article.append(figures([["Commits, " + lastDays(), card.commits], ["Uncommitted files", card.uncommitted]]));
       if (card.subjects.length) {
         article.append(list(card.subjects));
       }
     } else {
-      article.append(element("p", "note", "No git here."), figures([["Files changed, last 7 days", card.changed]]));
+      article.append(element("p", "note", "No git here."), figures([["Files changed, " + lastDays(), card.changed]]));
       article.append(card.newest.length ? list(card.newest) : element("p", "note", "Nothing changed."));
     }
     article.append(panel);
@@ -339,7 +358,7 @@
         return [file[0] + " ", element("span", "when", file[1])];
       })));
     } else {
-      article.append(element("p", "note", "Nothing in the last 7 days."));
+      article.append(element("p", "note", "Nothing in the " + lastDays() + "."));
     }
     return article;
   }
@@ -356,12 +375,13 @@
     }));
     $("ideas-empty").hidden = data.inbox.ideas.length > 0 || Boolean(data.inbox.error);
     $("updated").textContent = "Updated " + data.generated;
+    $("idea").maxLength = data.idea_chars;
     var problems = data.problems.slice();
     if (data.inbox.error) {
       problems.push(data.inbox.error);
     }
-    nodes.banner.hidden = problems.length === 0;
-    nodes.banner.textContent = problems.join(" ");
+    elements.banner.hidden = problems.length === 0;
+    elements.banner.textContent = problems.join(" ");
     $("strip-updated").textContent = "Updated " + data.generated;
     $("strip-problems").textContent = problems.length + (problems.length === 1 ? " problem" : " problems");
     $("strip-problems").className = problems.length ? "bad" : "";
@@ -386,7 +406,7 @@
         lines.push(card.label + ": " + subject);
       });
     });
-    nodes.ticker.replaceChildren.apply(nodes.ticker, lines.map(function (line) {
+    elements.ticker.replaceChildren.apply(elements.ticker, lines.map(function (line) {
       return element("span", "", line);
     }));
   }
@@ -469,25 +489,25 @@
       });
       return row;
     });
-    if (!items.length && nodes.q.value.trim()) {
+    if (!items.length && elements.q.value.trim()) {
       var none = element("li", "none", "Nothing matches. Try a type first, for example skill or report.");
       none.setAttribute("role", "option");
       items.push(none);
     }
-    nodes.results.replaceChildren.apply(nodes.results, items);
-    nodes.results.hidden = items.length === 0;
-    nodes.q.setAttribute("aria-expanded", items.length ? "true" : "false");
+    elements.results.replaceChildren.apply(elements.results, items);
+    elements.results.hidden = items.length === 0;
+    elements.q.setAttribute("aria-expanded", items.length ? "true" : "false");
     if (active >= 0) {
-      nodes.q.setAttribute("aria-activedescendant", "opt-" + active);
+      elements.q.setAttribute("aria-activedescendant", "opt-" + active);
     } else {
-      nodes.q.removeAttribute("aria-activedescendant");
+      elements.q.removeAttribute("aria-activedescendant");
     }
   }
 
   function pick(item) {
-    nodes.results.hidden = true;
-    nodes.q.setAttribute("aria-expanded", "false");
-    nodes.q.value = "";
+    elements.results.hidden = true;
+    elements.q.setAttribute("aria-expanded", "false");
+    elements.q.value = "";
     hits = [];
     active = -1;
     if (item.node) {
@@ -497,12 +517,12 @@
   }
 
   function setupSearch() {
-    nodes.q.addEventListener("input", function () {
-      hits = search(nodes.q.value);
+    elements.q.addEventListener("input", function () {
+      hits = search(elements.q.value);
       active = hits.length ? 0 : -1;
       renderResults();
     });
-    nodes.q.addEventListener("keydown", function (event) {
+    elements.q.addEventListener("keydown", function (event) {
       if (event.key === "ArrowDown" && hits.length) {
         active = (active + 1) % hits.length;
       } else if (event.key === "ArrowUp" && hits.length) {
@@ -512,8 +532,8 @@
         pick(hits[active]);
         return;
       } else if (event.key === "Escape") {
-        nodes.results.hidden = true;
-        nodes.q.setAttribute("aria-expanded", "false");
+        elements.results.hidden = true;
+        elements.q.setAttribute("aria-expanded", "false");
         return;
       } else {
         return;
@@ -521,16 +541,16 @@
       event.preventDefault();
       renderResults();
     });
-    nodes.q.addEventListener("blur", function () {
-      nodes.results.hidden = true;
-      nodes.q.setAttribute("aria-expanded", "false");
+    elements.q.addEventListener("blur", function () {
+      elements.results.hidden = true;
+      elements.q.setAttribute("aria-expanded", "false");
     });
     document.addEventListener("keydown", function (event) {
       var typing = /^(input|textarea|select)$/i.test(event.target.tagName);
       if ((event.key === "/" && !typing) || (event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey))) {
         event.preventDefault();
-        nodes.q.focus();
-        nodes.q.select();
+        elements.q.focus();
+        elements.q.select();
       }
     });
   }
@@ -547,7 +567,7 @@
 
   function openDetail(node, takeFocus) {
     selectedNode = node;
-    var box = nodes.detail;
+    var box = elements.detail;
     var hadFocus = box.contains(document.activeElement);
     var parts = [];
     var title = element("h2", "", node.label);
@@ -589,7 +609,7 @@
     parts.push(element("h4", "", "Connections (" + near.length + ")"));
     if (near.length) {
       var linkList = element("ul", "links");
-      near.slice(0, 40).forEach(function (entry) {
+      near.slice(0, LINKS_SHOWN).forEach(function (entry) {
         var item = element("li");
         var go = element("button", "link");
         go.type = "button";
@@ -601,8 +621,8 @@
         linkList.append(item);
       });
       parts.push(linkList);
-      if (near.length > 40) {
-        parts.push(element("p", "note", "and " + (near.length - 40) + " more"));
+      if (near.length > LINKS_SHOWN) {
+        parts.push(element("p", "note", "and " + (near.length - LINKS_SHOWN) + " more"));
       }
     } else {
       parts.push(element("p", "note", "No links from this one."));
@@ -632,23 +652,23 @@
   }
 
   function closeDetail() {
-    var lost = !document.activeElement || document.activeElement === document.body || nodes.detail.contains(document.activeElement);
+    var lost = !document.activeElement || document.activeElement === document.body || elements.detail.contains(document.activeElement);
     selectedNode = null;
     announced = "";
-    nodes.detail.replaceChildren(element("p", "note", "Nothing selected. Click a node on the map to see its details."));
+    elements.detail.replaceChildren(element("p", "note", "Nothing selected. Click a node on the map to see its details."));
     if ($("chat").hidden) {
-      nodes.side.hidden = true;
+      elements.side.hidden = true;
     }
     say("Selection cleared.");
     if (lost) {
-      nodes.canvas.focus();
+      elements.canvas.focus();
     }
   }
 
   function showSide(name) {
     var details = name === "details";
-    nodes.side.hidden = false;
-    nodes.detail.hidden = !details;
+    elements.side.hidden = false;
+    elements.detail.hidden = !details;
     $("chat").hidden = details;
     $("tab-details").setAttribute("aria-selected", details ? "true" : "false");
     $("tab-chat").setAttribute("aria-selected", details ? "false" : "true");
@@ -657,13 +677,13 @@
   }
 
   function closeSide() {
-    var inside = nodes.side.contains(document.activeElement);
-    nodes.side.hidden = true;
+    var inside = elements.side.contains(document.activeElement);
+    elements.side.hidden = true;
     if (graph && selectedNode) {
       graph.select(null, false);
     }
     if (inside) {
-      nodes.canvas.focus();
+      elements.canvas.focus();
     }
   }
 
@@ -715,7 +735,7 @@
     chat.node = node;
     chat.id = null;
     chat.log.replaceChildren();
-    chat.chip.textContent = (node ? node.label : "General chat") + " · " + CHIP_TAIL;
+    chat.chip.textContent = (node ? node.label : "General chat") + " · " + chipTail();
     chatNote("Ask about " + (node ? node.label : "your work") + ". Claude can read and search files here. It cannot change anything.", false);
   }
 
@@ -740,6 +760,11 @@
   function refreshChat() {
     return api("/api/chat").then(function (status) {
       chat.ready = status.ready;
+      chat.model = status.model;
+      chat.input.maxLength = status.message_chars;
+      if (!chat.id) {
+        chat.chip.textContent = (chat.node ? chat.node.label : "General chat") + " · " + chipTail();
+      }
       chat.problem.hidden = status.ready;
       chat.problem.textContent = status.problem || "";
       if (!chat.running) {
@@ -752,7 +777,7 @@
           window.clearTimeout(chat.orphan);
           chat.orphan = window.setTimeout(refreshChat, 3000);
         } else {
-          chat.cost.textContent = "This session so far: " + money(status.session_cost) + ". Each message stops at $1.";
+          chat.cost.textContent = "This session so far: " + money(status.session_cost) + ". Each message stops at $" + status.budget_usd + ".";
         }
       }
     }).catch(function (error) {
@@ -845,20 +870,11 @@
     setBusy(true);
     chatMessage("you").appendData(text);
     chat.input.value = "";
-    fetch("/api/chat", {
+    request("/api/chat", {
       method: "POST",
-      headers: { "X-OS-Token": token, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text, node: chat.node ? chat.node.id : null, chat: chat.id })
     }).then(function (response) {
-      if (!response.ok) {
-        return response.json().catch(function () {
-          return {};
-        }).then(function (data) {
-          var error = new Error(data.error || "Something went wrong. Try again.");
-          error.status = response.status;
-          throw error;
-        });
-      }
       return readStream(response, function (event) {
         onChatEvent(event, state);
       });
@@ -888,7 +904,7 @@
 
   function copyCommand() {
     var text = chat.input.value.trim() || (chat.node ? promptFor(chat.node) || "" : "");
-    text = text.replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]+/g, " ").trim();
+    text = text.replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]+/g, " ").replace(/"/g, "'").trim();
     if (!text) {
       chat.cost.textContent = "Write a message first, then copy it as a command.";
       return;
@@ -911,7 +927,7 @@
       counts[node.type] = (counts[node.type] || 0) + 1;
     });
     var previous = {};
-    nodes.filters.querySelectorAll("input").forEach(function (box) {
+    elements.filters.querySelectorAll("input").forEach(function (box) {
       previous[box.value] = box.checked;
     });
     var rows = TYPES.map(function (type) {
@@ -924,12 +940,12 @@
       label.append(box, element("span", "swatch", type[1]), element("span", "", type[2]), element("span", "count", String(counts[type[0]] || 0)));
       return label;
     });
-    nodes.filters.replaceChildren.apply(nodes.filters, rows);
+    elements.filters.replaceChildren.apply(elements.filters, rows);
   }
 
   function applyFilters() {
     var on = ["hub"];
-    nodes.filters.querySelectorAll("input").forEach(function (box) {
+    elements.filters.querySelectorAll("input").forEach(function (box) {
       if (box.checked) {
         on.push(box.value);
       }
@@ -954,14 +970,14 @@
     } else {
       parts.push("History scan not run");
     }
-    nodes.status.textContent = parts.join("  ·  ");
+    elements.status.textContent = parts.join("  ·  ");
   }
 
   function loadWorld(fresh) {
     return api(fresh ? "/api/world?fresh=1" : "/api/world").then(function (data) {
       worldData = data;
       if (!graph) {
-        graph = window.OSGraph.create(nodes.canvas, { calm: calm, onSelect: function (node) {
+        graph = window.ConsoleGraph.create(elements.canvas, { calm: calm, onSelect: function (node) {
           if (node) {
             openDetail(node, true);
           } else {
@@ -1094,7 +1110,7 @@
       }
     });
     if (!reports.length) {
-      reports.push(todayCard("Nothing new", [element("p", "note", "No report changed in the last 24 hours.")]));
+      reports.push(todayCard("Nothing new", [element("p", "note", "No report changed in the last " + overviewData.recent_hours + " hours.")]));
     }
     if (missing) {
       reports.push(todayCard("Not found", [element("p", "note", missing + (missing === 1 ? " report location" : " report locations") + " could not be read. The Cards tab says which.")]));
@@ -1115,7 +1131,7 @@
 
   function setCalm(flag) {
     calm = flag;
-    nodes.calm.setAttribute("aria-pressed", flag ? "true" : "false");
+    elements.calm.setAttribute("aria-pressed", flag ? "true" : "false");
     document.body.classList.toggle("calm", flag);
     if (graph) {
       graph.setCalm(flag);
@@ -1124,7 +1140,7 @@
 
   function tickClock() {
     var now = new Date();
-    nodes.clock.textContent = now.toLocaleTimeString("en-GB");
+    elements.clock.textContent = now.toLocaleTimeString("en-GB");
   }
 
   VIEWS.forEach(function (name, index) {
@@ -1144,8 +1160,8 @@
   $("today-refresh").addEventListener("click", function () {
     loadOverview(true);
   });
-  nodes.calm.addEventListener("click", function () {
-    setCalm(nodes.calm.getAttribute("aria-pressed") !== "true");
+  elements.calm.addEventListener("click", function () {
+    setCalm(elements.calm.getAttribute("aria-pressed") !== "true");
   });
   $("more").addEventListener("click", function () {
     var button = $("more");
@@ -1209,13 +1225,13 @@
   $("rebuild").addEventListener("click", function () {
     loadWorld(true);
   });
-  nodes.rescan.addEventListener("click", function () {
-    nodes.rescan.disabled = true;
+  elements.rescan.addEventListener("click", function () {
+    elements.rescan.disabled = true;
     api("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then(function () {
       lastScanState = "scanning";
       return loadWorld(true);
     }).catch(showError).then(function () {
-      nodes.rescan.disabled = false;
+      elements.rescan.disabled = false;
     });
   });
   $("refresh").addEventListener("click", function () {
@@ -1223,14 +1239,14 @@
   });
   wireAddForm($("add-form"), $("idea"), $("add-status"));
   if (window.matchMedia("(max-width: 720px)").matches) {
-    nodes.filtersBox.open = false;
+    elements.filtersBox.open = false;
   } else {
-    nodes.filtersBox.open = true;
+    elements.filtersBox.open = true;
   }
   setupSearch();
   startFresh(null);
   chat.send.disabled = true;
-  nodes.detail.append(element("p", "note", "Nothing selected. Click a node on the map to see its details."));
+  elements.detail.append(element("p", "note", "Nothing selected. Click a node on the map to see its details."));
   setCalm(calm);
   tickClock();
   window.setInterval(tickClock, 1000);

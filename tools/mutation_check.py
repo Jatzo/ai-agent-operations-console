@@ -17,7 +17,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
-SKIP = shutil.ignore_patterns(".git", ".demo-world", "__pycache__", ".pytest_cache", "docs", "dashboard.html")
+SKIP = shutil.ignore_patterns(".git", ".demo-world", "__pycache__", ".pytest_cache", "docs")
 BAD_SIGNS = ("SyntaxError", "ImportError", "ModuleNotFoundError", "collection error", "errors during collection")
 
 

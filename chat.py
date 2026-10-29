@@ -29,7 +29,8 @@ BUDGET_USD = "1"
 TOOLS = "Read,Glob,Grep"
 SECRET_PATTERNS = [
     "**/.env*", "**/*.pem", "**/*.key", "**/*.pfx", "**/*.p12", "**/*.kdbx", "**/id_*", "**/.npmrc", "**/.netrc",
-    "**/*credentials*", "**/*secret*", "**/*token*",
+    "**/*credentials*", "**/*secret*", "**/*token*", "**/*password*", "**/.pgpass", "**/.htpasswd", "**/*.ppk",
+    "**/*.jks", "**/rclone.conf", "**/.git/config",
 ]
 DENIED_TOOLS = ("Read", "Grep", "Glob")
 SYSTEM_TEXT = (
@@ -99,7 +100,7 @@ def is_within(inner, outer):
 
 
 def has_odd_characters(text):
-    return any(unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp", "Cs") for character in str(text))
+    return any(unicodedata.category(character) in world.HIDDEN_CATEGORIES for character in str(text))
 
 
 def allowed_roots(home, projects):
@@ -198,20 +199,20 @@ def intro(node, kind):
     return "The owner opened a general chat in the console."
 
 
-def describe(kind, label_name, cwd):
+def describe(label_name, cwd):
     where = str(cwd)
     return f"{label_name} · {where} · read only · {MODEL.capitalize()} · files Claude reads are sent to Anthropic"
 
 
-def resolve_context(node, os_dir, home, projects):
+def resolve_context(node, index_dir, home, projects):
     """Decide the working folder, extra folders and first-message sentence for a node (or None for a general chat)."""
-    os_dir = Path(os_dir)
+    index_dir = Path(index_dir)
     if not node or not isinstance(node, dict):
-        return Context(os_dir, [], describe("General chat", "General chat", os_dir), intro({}, "general"))
+        return Context(index_dir, [], describe("General chat", index_dir), intro({}, "general"))
     kind = str(node.get("type", ""))
     path = node.get("path", "")
     label_name = world.clean(node.get("label") or node.get("name") or kind, 60)
-    cwd, add_dirs, refused = os_dir, [], ""
+    cwd, add_dirs, refused = index_dir, [], ""
     if kind == "project":
         match = None
         target = resolved_or_none(path) if path and not has_odd_characters(path) else None
@@ -237,16 +238,17 @@ def resolve_context(node, os_dir, home, projects):
             add_dirs.append(folder)
     else:
         kind = "general"
-    if cwd != os_dir and private_folder(resolved_or_none(cwd) or cwd, home):
-        cwd, kind, refused = os_dir, "general", "That node's folder holds private Claude data, so the chat uses the home base."
-    return Context(cwd, add_dirs, describe(kind, label_name, cwd), intro(node, kind), refused)
+    if cwd != index_dir and private_folder(resolved_or_none(cwd) or cwd, home):
+        cwd, kind, refused = index_dir, "general", "That node's folder holds private Claude data, so the chat uses the home base."
+    return Context(cwd, add_dirs, describe(label_name, cwd), intro(node, kind), refused)
 
 
 MESSAGE_CAP = 4000
 LIMITS = {
     "total_seconds": 300, "idle_seconds": 90, "heartbeat_seconds": 10, "min_gap_seconds": 1.0,
     "session_cap_usd": 5.0, "killed_run_usd": 1.0, "text_cap": 200_000, "line_cap": 1_048_576,
-    "stderr_keep": 4096, "chats_kept": 20,
+    "stderr_keep": 4096, "chats_kept": 20, "version_check_seconds": 30, "version_cache_seconds": 60,
+    "kill_seconds": 15, "exit_wait_seconds": 10,
 }
 KNOWN_TOOLS = {"Read", "Glob", "Grep"}
 FIXED_ERRORS = {
@@ -259,7 +261,7 @@ FIXED_ERRORS = {
     "version": "Claude Code was updated. Run the chat gate check first.",
     "generic": "Claude Code stopped with an error. Send the message again.",
     "empty": "Claude returned nothing. Try again.",
-    "cut": "The answer was cut at 200 KB.",
+    "cut": f"The answer was cut at {LIMITS['text_cap']:,} characters.",
 }
 
 
@@ -272,7 +274,7 @@ class ChatError(Exception):
 
 def validate_message(value):
     """One message from the page: 1 to 4,000 characters, newline and tab allowed, no other control or invisible characters."""
-    problem = ChatError(400, "Write a message of 1 to 4,000 characters, with no control or invisible characters.")
+    problem = ChatError(400, f"Write a message of 1 to {MESSAGE_CAP:,} characters, with no control or invisible characters.")
     if not isinstance(value, str):
         raise problem
     text = value.strip()
@@ -283,7 +285,7 @@ def validate_message(value):
     except UnicodeEncodeError:
         raise problem
     for character in text:
-        if character not in "\n\t" and unicodedata.category(character) in ("Cc", "Cf", "Zl", "Zp"):
+        if character not in "\n\t" and unicodedata.category(character) in world.HIDDEN_CATEGORIES:
             raise problem
     return text
 
@@ -292,13 +294,13 @@ def clean_stream_text(value):
     """Answer text with control and invisible characters removed, newline and tab kept."""
     return "".join(
         character for character in str(value)
-        if character in "\n\t" or unicodedata.category(character) not in ("Cc", "Cf", "Zl", "Zp", "Cs")
+        if character in "\n\t" or unicodedata.category(character) not in world.HIDDEN_CATEGORIES
     )
 
 
 def find_executable(environment=None):
     environment = os.environ if environment is None else environment
-    wanted = environment.get("OS_CLAUDE") or shutil.which("claude")
+    wanted = environment.get("CONSOLE_CLAUDE") or shutil.which("claude")
     if wanted and Path(wanted).is_file() and Path(wanted).suffix.lower() == ".exe":
         return str(Path(wanted))
     raise ChatError(503, FIXED_ERRORS["missing"])
@@ -307,7 +309,7 @@ def find_executable(environment=None):
 def read_version(executable):
     try:
         result = subprocess.run(
-            [str(executable), "--version"], capture_output=True, text=True, timeout=30,
+            [str(executable), "--version"], capture_output=True, text=True, timeout=LIMITS["version_check_seconds"],
             env=clean_environment(os.environ), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -322,6 +324,10 @@ def tested_versions(path):
     except OSError:
         return set()
     return {line.strip() for line in lines if line.strip() and not line.strip().startswith("#")}
+
+
+JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000  # Windows ends every process in the job when its last handle closes
+JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9  # the information class SetInformationJobObject takes for that limit
 
 
 class JobObject:
@@ -360,8 +366,8 @@ class JobObject:
         if not handle:
             return
         info = Extended()
-        info.Basic.LimitFlags = 0x2000
-        if kernel.SetInformationJobObject(handle, 9, ctypes.byref(info), ctypes.sizeof(info)):
+        info.Basic.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if kernel.SetInformationJobObject(handle, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, ctypes.byref(info), ctypes.sizeof(info)):
             self.handle = handle
         else:
             kernel.CloseHandle(handle)
@@ -382,7 +388,7 @@ def kill_tree(process):
         return
     if os.name == "nt":
         try:
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=15)
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=LIMITS["kill_seconds"])
         except (OSError, subprocess.TimeoutExpired):
             pass
     try:
@@ -403,7 +409,7 @@ class ChatState:
     cost: float = 0.0
 
 
-def classify_failure(tail, code):
+def classify_failure(tail):
     lowered = tail.lower()
     if any(word in lowered for word in ("login", "log in", "sign in", "signed in", "authenticat", "oauth", "unauthorized")):
         return FIXED_ERRORS["signin"]
@@ -415,8 +421,8 @@ def classify_failure(tail, code):
 class ChatManager:
     """Runs one read only Claude Code message at a time and sends only a few safe events to a send function."""
 
-    def __init__(self, os_dir, home, projects, launcher=None, executable=None, version=None, tested=None, limits=None):
-        self.os_dir, self.home, self.projects = Path(os_dir), Path(home), projects
+    def __init__(self, index_dir, home, projects, launcher=None, executable=None, version=None, tested=None, limits=None):
+        self.index_dir, self.home, self.projects = Path(index_dir), Path(home), projects
         self.launcher, self.executable = launcher, executable
         self.version_provider, self.tested_provider = version, tested
         self.limits = {**LIMITS, **(limits or {})}
@@ -432,7 +438,7 @@ class ChatManager:
 
     def current_version(self):
         value, stamp = self.version_cache
-        if value and time.monotonic() - stamp < 60:
+        if value and time.monotonic() - stamp < self.limits["version_cache_seconds"]:
             return value
         provider = self.version_provider
         found = provider() if provider else read_version(self.executable or find_executable())
@@ -451,6 +457,7 @@ class ChatManager:
         return {
             "ready": not problem, "problem": problem, "version": version, "running": self.running,
             "label": self.current_label, "session_cost": round(self.session_cost, 4),
+            "model": MODEL.capitalize(), "budget_usd": BUDGET_USD, "message_chars": MESSAGE_CAP,
         }
 
     def stop(self):
@@ -464,7 +471,7 @@ class ChatManager:
 
     def shutdown(self):
         self.stop()
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + self.limits["exit_wait_seconds"]
         while self.running and time.monotonic() < deadline:
             time.sleep(0.05)
 
@@ -494,7 +501,9 @@ class ChatManager:
                 raise ChatError(429, "The spending total for this session has been reached. Restart the console to chat again.")
             if time.monotonic() - self.last_start < self.limits["min_gap_seconds"]:
                 raise ChatError(429, "Wait a moment before sending another message.")
-            context = resolve_context(node, self.os_dir, self.home, self.projects())
+            if private_folder(resolved_or_none(self.index_dir) or Path(self.index_dir), self.home):
+                raise ChatError(409, "The index folder holds private Claude data, so the chat will not start. Restart the console with --root pointing at another folder.")
+            context = resolve_context(node, self.index_dir, self.home, self.projects())
             new_id, state, resumed = self.chat_for(node, chat_id, context)
             executable = self.executable or find_executable()
             command = build_command(executable, state.session_id, resumed and state.messages > 0, state.add_dirs)
@@ -579,7 +588,7 @@ class ChatManager:
             self.finish(process, job, True)
             return
         started = last_output = last_beat = time.monotonic()
-        spoke, text_total, result, cut, reason = False, 0, None, False, ""
+        spoke, tooled, text_total, result, cut, reason = False, False, 0, None, False, ""
         while True:
             now = time.monotonic()
             if self.stop_event.is_set():
@@ -629,6 +638,7 @@ class ChatManager:
                         if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") in KNOWN_TOOLS:
                             data = block.get("input") if isinstance(block.get("input"), dict) else {}
                             target = data.get("file_path") or data.get("path") or data.get("pattern") or ""
+                            tooled = True
                             send({"t": "tool", "name": block["name"], "target": world.clean(target, 120)})
                 elif kind == "result":
                     result = event
@@ -647,7 +657,7 @@ class ChatManager:
                 message_cost = float(result.get("total_cost_usd") or 0)
             except (TypeError, ValueError):
                 message_cost = 0.0
-        elif reason in ("stopped", "timeout", "silent", "gone"):
+        elif reason in ("stopped", "timeout", "silent", "gone") or spoke or tooled:
             message_cost = float(limits["killed_run_usd"])
         state.cost += message_cost
         self.session_cost += message_cost
@@ -660,7 +670,7 @@ class ChatManager:
                 send({"t": "error", "message": FIXED_ERRORS[reason]})
             elif result is None:
                 tail = b"".join(stderr_tail).decode("utf-8", errors="replace")
-                send({"t": "error", "message": classify_failure(tail, process.returncode)})
+                send({"t": "error", "message": classify_failure(tail)})
             else:
                 subtype = str(result.get("subtype", ""))
                 if result.get("is_error") or subtype.startswith("error"):
@@ -687,7 +697,7 @@ class ChatManager:
         if kill:
             kill_tree(process)
         try:
-            process.wait(timeout=10)
+            process.wait(timeout=self.limits["exit_wait_seconds"])
         except subprocess.TimeoutExpired:
             kill_tree(process)
         job.close()

@@ -16,6 +16,7 @@ import socketserver
 import sys
 import threading
 import time
+import traceback
 import unicodedata
 import webbrowser
 from datetime import datetime
@@ -40,9 +41,17 @@ MAX_INBOX_BYTES = 100 * 1024
 OVERVIEW_CACHE_SECONDS = 10
 WORLD_CACHE_SECONDS = 60
 REFRESH_MINIMUM_SECONDS = 2
-COMMITS_SHOWN = 50
-LINES_SHOWN = 100
-REFUSED_CATEGORIES = {"Cc", "Cf", "Zl", "Zp"}
+# Each API path, the methods it takes, and for each the handler's name and the largest body it reads (None for a GET).
+# Every handler takes one argument: the parsed JSON body for a POST, the parsed query string for a GET.
+ENDPOINTS = {
+    "/api/overview": {"GET": ("get_overview", None)},
+    "/api/world": {"GET": ("get_world", None)},
+    "/api/project": {"GET": ("get_project", None)},
+    "/api/scan": {"GET": ("get_scan", None), "POST": ("start_scan", MAX_BODY_BYTES)},
+    "/api/chat": {"GET": ("get_chat", None), "POST": ("stream_chat", MAX_CHAT_BODY_BYTES)},
+    "/api/chat/stop": {"POST": ("stop_chat", MAX_BODY_BYTES)},
+    "/api/inbox": {"POST": ("add_idea", MAX_BODY_BYTES)},
+}
 STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.css": ("app.css", "text/css; charset=utf-8"),
@@ -66,17 +75,9 @@ class Refusal(Exception):
 project_id = world.project_id
 
 
-def read_index(os_dir):
-    """The index text, or a reason it could not be read."""
-    try:
-        return (Path(os_dir) / "CLAUDE.md").read_text(encoding="utf-8"), None
-    except OSError as error:
-        return None, f"{Path(os_dir) / 'CLAUDE.md'} could not be read: {error}"
-
-
-def build_overview(os_dir):
+def build_overview(index_dir):
     now = time.time()
-    text, problem = read_index(os_dir)
+    text, problem = overview.read_index(index_dir)
     problems = [problem] if problem else []
     projects, reports = [], []
     if text is not None:
@@ -92,10 +93,12 @@ def build_overview(os_dir):
                 reports.append(overview.read_report(label, location, fixed, now, pattern or "*"))
         except overview.CouldNotRead as error:
             problems.append(str(error))
-    ideas, inbox_error = overview.read_inbox(Path(os_dir) / "INBOX.md")
+    ideas, inbox_error = overview.read_inbox(Path(index_dir) / "INBOX.md")
     return {
         "generated": datetime.fromtimestamp(now).strftime("%H:%M:%S"),
         "window_days": overview.WINDOW_DAYS,
+        "recent_hours": overview.RECENT_HOURS,
+        "idea_chars": MAX_IDEA_CHARACTERS,
         "problems": problems,
         "projects": projects,
         "reports": reports,
@@ -103,9 +106,9 @@ def build_overview(os_dir):
     }
 
 
-def project_detail(os_dir, wanted_id):
+def project_detail(index_dir, wanted_id):
     """Drill-down for one project, found by its id in a fresh read of the index. None if there is no match."""
-    text, _ = read_index(os_dir)
+    text, _ = overview.read_index(index_dir)
     if text is None:
         return None
     try:
@@ -121,45 +124,23 @@ def project_detail(os_dir, wanted_id):
     try:
         detail["kind"] = overview.folder_kind(folder)
         if detail["kind"] == "git":
-            detail.update(git_detail(folder))
+            detail.update(overview.git_detail(folder))
         else:
             files = overview.changed_since_window(folder, now)
             detail["total"] = len(files)
             detail["files"] = [
                 {"path": name, "date": datetime.fromtimestamp(stamp).strftime("%Y-%m-%d")}
-                for stamp, name in files[:LINES_SHOWN]
+                for stamp, name in files[:overview.LINES_SHOWN]
             ]
     except overview.CouldNotRead as error:
         detail.update(kind="error", error=str(error))
     return detail
 
 
-def git_detail(folder):
-    log = overview.run_git(
-        folder, "-c", "log.showSignature=false", "-c", "core.quotepath=false",
-        "log", "-n", str(COMMITS_SHOWN), "--date=short", "--format=%h%x09%ad%x09%s",
-    )
-    empty = log.returncode != 0 and "does not have any commits yet" in log.stderr
-    if log.returncode != 0 and not empty:
-        raise overview.CouldNotRead(f"git could not read the history of {folder}")
-    commits = []
-    for line in log.stdout.splitlines():
-        short, date, subject = (line.split("\t", 2) + ["", ""])[:3]
-        commits.append({"hash": short, "date": date, "subject": subject})
-    status = overview.run_git(folder, "-c", "core.quotepath=false", "status", "--porcelain")
-    if status.returncode != 0:
-        raise overview.CouldNotRead(f"git could not read the status of {folder}")
-    lines = [line for line in status.stdout.splitlines() if line.strip()]
-    return {
-        "commits": commits, "empty": empty,
-        "uncommitted": lines[:LINES_SHOWN], "uncommitted_total": len(lines),
-    }
-
-
 def clean_idea(value):
     """The idea as one safe line, or a Refusal saying what to fix."""
     message = (
-        "Write the idea as one line of 1 to 300 characters. Invisible characters, "
+        f"Write the idea as one line of 1 to {MAX_IDEA_CHARACTERS} characters. Invisible characters, "
         "such as those in pasted text or joined emoji, are not allowed."
     )
     if not isinstance(value, str):
@@ -171,14 +152,14 @@ def clean_idea(value):
         text.encode("utf-8")
     except UnicodeEncodeError:
         raise Refusal(400, message)
-    if any(unicodedata.category(character) in REFUSED_CATEGORIES for character in text):
+    if any(unicodedata.category(character) in overview.HIDDEN_CATEGORIES for character in text):
         raise Refusal(400, message)
     return text
 
 
-def append_idea(os_dir, text, lock):
+def append_idea(index_dir, text, lock):
     """Appends '- text' as one write. The file must already exist, so its heading is never lost."""
-    path = Path(os_dir) / "INBOX.md"
+    path = Path(index_dir) / "INBOX.md"
     with lock:
         try:
             descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | getattr(os, "O_BINARY", 0))
@@ -197,7 +178,7 @@ def append_idea(os_dir, text, lock):
             lead = ending if tail and not tail.endswith(b"\n") else b""
             payload = lead + b"- " + text.encode("utf-8") + ending
             if size + len(payload) > MAX_INBOX_BYTES:
-                raise Refusal(413, "The inbox file is full (100 KB). Tidy INBOX.md, then try again.")
+                raise Refusal(413, f"The inbox file is full ({MAX_INBOX_BYTES // 1024} KB). Tidy INBOX.md, then try again.")
             if os.write(descriptor, payload) != len(payload):
                 raise Refusal(500, "The idea could not be written in full. Check INBOX.md, then try again.")
         finally:
@@ -241,6 +222,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (TimeoutError, ConnectionError):
             self.close_connection = True
         except Exception:
+            traceback.print_exc()
             self.send_json(500, {"error": "Something went wrong reading that. Try Refresh."})
 
     def route(self):
@@ -256,14 +238,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.command != "GET":
                 raise Refusal(405, "That method is not allowed here.")
             self.serve_static(path)
-        elif path in ("/api/overview", "/api/project", "/api/inbox", "/api/world", "/api/scan", "/api/chat", "/api/chat/stop"):
+        elif path in ENDPOINTS:
             self.check_token()
             self.serve_api(path)
         else:
             raise Refusal(404, "There is nothing at that address.")
 
     def check_token(self):
-        given = self.headers.get("X-OS-Token") or ""
+        given = self.headers.get("X-Console-Token") or ""
         if not hmac.compare_digest(given.encode("utf-8"), self.server.token.encode("utf-8")):
             raise Refusal(403, "The server restarted, or this page is out of date. Reload the page.")
 
@@ -275,39 +257,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_bytes(200, body, content_type)
 
     def serve_api(self, path):
-        if path in ("/api/inbox", "/api/scan", "/api/chat", "/api/chat/stop") and self.command == "POST":
-            data = self.read_post_json(MAX_CHAT_BODY_BYTES if path == "/api/chat" else MAX_BODY_BYTES)
-            if path == "/api/inbox":
-                self.add_idea(data)
-            elif path == "/api/scan":
-                self.start_scan()
-            elif path == "/api/chat":
-                self.stream_chat(data)
-            else:
-                self.send_json(200, {"stopped": self.server.chat.stop()})
-            return
-        if self.command != "GET" or path in ("/api/inbox", "/api/chat/stop"):
+        methods = ENDPOINTS[path]
+        if self.command not in methods:
             raise Refusal(405, "That method is not allowed here.")
-        query = parse_qs(urlsplit(self.path).query)
-        if path == "/api/chat":
-            self.send_json(200, self.server.chat.status())
-            return
-        if path == "/api/overview":
-            self.send_json(200, self.server.overview(fresh="fresh" in query))
-            return
-        if path == "/api/world":
-            self.send_json(200, self.server.world_view(fresh="fresh" in query))
-            return
-        if path == "/api/scan":
-            self.send_json(200, self.server.scan_state())
-            return
+        handler_name, body_limit = methods[self.command]
+        if self.command == "POST":
+            argument = self.read_post_json(body_limit)
+        else:
+            argument = parse_qs(urlsplit(self.path).query)
+        getattr(self, handler_name)(argument)
+
+    def get_chat(self, query):
+        self.send_json(200, self.server.chat.status())
+
+    def get_overview(self, query):
+        self.send_json(200, self.server.overview(fresh="fresh" in query))
+
+    def get_world(self, query):
+        self.send_json(200, self.server.world_view(fresh="fresh" in query))
+
+    def get_scan(self, query):
+        self.send_json(200, self.server.scan_state())
+
+    def get_project(self, query):
         ids = query.get("id", [])
         if len(ids) != 1 or not re.fullmatch(r"[0-9a-f]{12}", ids[0], re.ASCII):
             raise Refusal(400, "That is not a project id. Refresh the page and try again.")
-        detail = project_detail(self.server.os_dir, ids[0])
+        detail = project_detail(self.server.index_dir, ids[0])
         if detail is None:
             raise Refusal(404, "The index changed. Refresh the page.")
         self.send_json(200, detail)
+
+    def stop_chat(self, data):
+        self.send_json(200, {"stopped": self.server.chat.stop()})
 
     def read_post_json(self, limit=MAX_BODY_BYTES):
         allowed = {f"http://{host}" for host in self.allowed_hosts()}
@@ -340,7 +322,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def add_idea(self, data):
         text = clean_idea(data.get("text"))
-        append_idea(self.server.os_dir, text, self.server.inbox_lock)
+        append_idea(self.server.index_dir, text, self.server.inbox_lock)
         self.server.forget_overview()
         self.send_json(201, {"ok": True})
 
@@ -381,11 +363,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not started:
                 raise Refusal(error.status, error.message)
 
-    def start_scan(self):
+    def start_scan(self, data):
         self.server.ensure_world()
         outcome = self.server.scan.start()
         if outcome == "too soon":
-            raise Refusal(429, "A scan finished a moment ago. Wait 30 seconds, then try again.")
+            raise Refusal(429, f"A scan finished a moment ago. Wait {world.SCAN_MIN_INTERVAL_SECONDS} seconds, then try again.")
         note = "A scan is already running." if outcome == "running" else ""
         self.send_json(202 if outcome == "started" else 200, {"state": self.server.scan_state()["state"], "note": note})
 
@@ -407,7 +389,7 @@ class DashboardServer(http.server.ThreadingHTTPServer):
         with self.overview_lock:
             age = time.monotonic() - self.overview_at if self.overview_cache is not None else float("inf")
             if age >= (REFRESH_MINIMUM_SECONDS if fresh else OVERVIEW_CACHE_SECONDS):
-                self.overview_cache = build_overview(self.os_dir)
+                self.overview_cache = build_overview(self.index_dir)
                 self.overview_at = time.monotonic()
             return self.overview_cache
 
@@ -422,7 +404,7 @@ class DashboardServer(http.server.ThreadingHTTPServer):
         with self.world_lock:
             age = time.monotonic() - self.world_at if self.world_cache is not None else float("inf")
             if age >= (REFRESH_MINIMUM_SECONDS if fresh else WORLD_CACHE_SECONDS):
-                self.world_cache = world.build_world(self.home, self.os_dir)
+                self.world_cache = world.build_world(self.home, self.index_dir)
                 self.world_at = time.monotonic()
                 self.scan.set_keys(*world.usage_keys(self.world_cache))
             return self.world_cache
@@ -449,9 +431,9 @@ class DashboardServer(http.server.ThreadingHTTPServer):
         super().server_close()
 
 
-def indexed_projects(os_dir):
+def indexed_projects(index_dir):
     """The project folders listed in the index, read fresh each time."""
-    text, _ = read_index(os_dir)
+    text, _ = overview.read_index(index_dir)
     if text is None:
         return []
     try:
@@ -460,7 +442,7 @@ def indexed_projects(os_dir):
         return []
 
 
-def make_server(os_dir=CODE_DIR, ports=PORTS, home=HOME, chat_manager=None, gate_file=None):
+def make_server(index_dir=CODE_DIR, ports=PORTS, home=HOME, chat_manager=None, gate_file=None):
     """Binds to 127.0.0.1 on the first free port in ports. Raises OSError if none is free."""
     last_error = OSError("No port was tried.")
     for port in ports:
@@ -469,7 +451,7 @@ def make_server(os_dir=CODE_DIR, ports=PORTS, home=HOME, chat_manager=None, gate
         except OSError as error:
             last_error = error
             continue
-        server.os_dir = Path(os_dir)
+        server.index_dir = Path(index_dir)
         server.token = secrets.token_urlsafe(32)
         server.inbox_lock = threading.Lock()
         server.overview_lock = threading.Lock()
@@ -481,7 +463,7 @@ def make_server(os_dir=CODE_DIR, ports=PORTS, home=HOME, chat_manager=None, gate
         server.world_at = 0.0
         server.scan = world.UsageScan(Path(home) / "projects", {}, {})
         server.chat = chat_manager or chat.ChatManager(
-            os_dir, home, lambda: indexed_projects(os_dir),
+            index_dir, home, lambda: indexed_projects(index_dir),
             tested=lambda: chat.tested_versions(gate_file or CODE_DIR / TESTED_VERSION_FILE),
         )
         return server
@@ -513,6 +495,13 @@ def main(argv=None):
         print(
             f"There is no CLAUDE.md index in {arguments.root}. Point --root at the folder that holds it "
             "(README.md shows the format), or run demo.py to see a made-up world.",
+            file=sys.stderr,
+        )
+        return 2
+    if chat.private_folder(arguments.root.resolve(), arguments.home):
+        print(
+            f"{arguments.root} holds private Claude data (login, settings or transcripts), so the console will not use it as the index folder. "
+            "Make a separate folder for CLAUDE.md and INBOX.md, then point --root at it.",
             file=sys.stderr,
         )
         return 2

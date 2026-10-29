@@ -13,14 +13,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import serve_dashboard
-from test_build_dashboard import index_state, make_os_dir, make_repo
+from test_build_dashboard import index_state, make_index_dir, make_repo
 
 WEB = Path(serve_dashboard.__file__).resolve().parent / "web"
 INBOX_START = "# Inbox\n\nOne line per idea.\n"
 
 
-def start(os_dir, ports=(0,)):
-    server = serve_dashboard.make_server(os_dir, ports=list(ports))
+def start(index_dir, ports=(0,)):
+    server = serve_dashboard.make_server(index_dir, ports=list(ports))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -38,23 +38,23 @@ def app(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
     (plain / "page.txt").write_text("x", encoding="utf-8")
-    os_dir = make_os_dir(
+    index_dir = make_index_dir(
         tmp_path,
         [("Repo", repo), ("Plain", plain)],
         [("Seo", tmp_path / "reports" / "YYYY-MM-DD.md")],
     )
-    (os_dir / "INBOX.md").write_bytes(INBOX_START.encode("utf-8"))
-    server = start(os_dir)
+    (index_dir / "INBOX.md").write_bytes(INBOX_START.encode("utf-8"))
+    server = start(index_dir)
     yield SimpleNamespace(
-        server=server, port=server.server_address[1], token=server.token, os_dir=os_dir, repo=repo, plain=plain,
-        inbox=os_dir / "INBOX.md", index=os_dir / "CLAUDE.md", tmp=tmp_path,
+        server=server, port=server.server_address[1], token=server.token, index_dir=index_dir, repo=repo, plain=plain,
+        inbox=index_dir / "INBOX.md", index=index_dir / "CLAUDE.md", tmp=tmp_path,
     )
     stop(server)
 
 
 def send(app, method="GET", path="/", headers=None, body=b"", host=True, port=None):
     port = port or app.port
-    base = {"Connection": "close", "X-OS-Token": app.token}
+    base = {"Connection": "close", "X-Console-Token": app.token}
     if host:
         base["Host"] = f"127.0.0.1:{port}"
     if method == "POST":
@@ -136,8 +136,8 @@ def test_the_drill_down_for_a_plain_folder_lists_changed_files(app):
 def test_a_repo_with_no_commits_says_so(tmp_path):
     empty = tmp_path / "empty"
     make_repo(empty, [])
-    os_dir = make_os_dir(tmp_path, [("Empty", empty)])
-    server = start(os_dir)
+    index_dir = make_index_dir(tmp_path, [("Empty", empty)])
+    server = start(index_dir)
     app = SimpleNamespace(server=server, port=server.server_address[1], token=server.token)
     try:
         detail = as_json(api_get(app, "/api/project?id=" + project_id(app, "Empty")))
@@ -285,8 +285,8 @@ def valid_text(**changes):
 
 
 REFUSALS = [
-    ("no token", {"headers": {"X-OS-Token": None}}, 403),
-    ("wrong token", {"headers": {"X-OS-Token": "x" * 43}}, 403),
+    ("no token", {"headers": {"X-Console-Token": None}}, 403),
+    ("wrong token", {"headers": {"X-Console-Token": "x" * 43}}, 403),
     ("foreign origin", {"headers": {"Origin": "http://evil.example"}}, 403),
     ("origin null", {"headers": {"Origin": "null"}}, 403),
     ("origin with the wrong port", {"headers": {"Origin": "http://127.0.0.1:1"}}, 403),
@@ -389,8 +389,8 @@ def test_the_host_is_compared_without_regard_to_case_and_localhost_is_allowed(ap
 
 
 def test_every_api_get_needs_the_token(app):
-    assert send(app, "GET", "/api/overview", headers={"X-OS-Token": None}).status == 403
-    assert send(app, "GET", "/api/project?id=0123456789ab", headers={"X-OS-Token": None}).status == 403
+    assert send(app, "GET", "/api/overview", headers={"X-Console-Token": None}).status == 403
+    assert send(app, "GET", "/api/project?id=0123456789ab", headers={"X-Console-Token": None}).status == 403
     assert send(app, "GET", "/api/overview").status == 200
 
 
@@ -398,7 +398,7 @@ def test_a_body_that_stalls_is_cut_off_and_the_server_stays_responsive(app, monk
     monkeypatch.setattr(serve_dashboard.Handler, "timeout", 1)
     stalled = socket.create_connection(("127.0.0.1", app.port), timeout=5)
     head = (
-        f"POST /api/inbox HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nX-OS-Token: {app.token}\r\n"
+        f"POST /api/inbox HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nX-Console-Token: {app.token}\r\n"
         "Content-Type: application/json\r\nContent-Length: 50\r\nConnection: close\r\n\r\n{\"te"
     )
     stalled.sendall(head.encode())
@@ -419,7 +419,7 @@ def test_the_server_is_bound_to_127_0_0_1_and_a_second_server_cannot_take_the_sa
     assert app.server.server_address[0] == "127.0.0.1"
 
     with pytest.raises(OSError):
-        serve_dashboard.make_server(app.os_dir, ports=[app.port])
+        serve_dashboard.make_server(app.index_dir, ports=[app.port])
 
 
 def test_a_socket_that_asks_to_share_the_port_still_cannot_take_it(app):
@@ -433,7 +433,7 @@ def test_a_socket_that_asks_to_share_the_port_still_cannot_take_it(app):
 
 
 def test_a_taken_port_falls_forward_to_the_next_one(app):
-    second = serve_dashboard.make_server(app.os_dir, ports=[app.port, 0])
+    second = serve_dashboard.make_server(app.index_dir, ports=[app.port, 0])
     try:
         assert second.server_address[1] != app.port
     finally:
@@ -453,7 +453,7 @@ def test_get_on_the_inbox_endpoint_and_post_on_the_others_give_405(app):
 
 
 def test_the_token_is_different_on_every_run_and_an_old_token_is_refused(app):
-    other = start(app.os_dir)
+    other = start(app.index_dir)
     try:
         assert other.token != app.token
         old = SimpleNamespace(port=other.server_address[1], token=app.token)
@@ -467,7 +467,7 @@ def tree_state(folder):
 
 
 def test_after_every_endpoint_has_been_used_only_the_inbox_has_changed(app):
-    os_before = tree_state(app.os_dir)
+    os_before = tree_state(app.index_dir)
     repo_files_before = sorted(p.name for p in app.repo.iterdir())
     index_before = index_state(app.repo)
 
@@ -476,9 +476,9 @@ def test_after_every_endpoint_has_been_used_only_the_inbox_has_changed(app):
         api_get(app, "/api/project?id=" + project_id(app, label))
     send(app, "GET", "/")
     add_idea(app, "one change")
-    add_idea(app, "bad", headers={"X-OS-Token": None})
+    add_idea(app, "bad", headers={"X-Console-Token": None})
 
-    os_after = tree_state(app.os_dir)
+    os_after = tree_state(app.index_dir)
     changed = {name for name in os_after if os_after[name] != os_before.get(name)}
     assert changed == {"INBOX.md"}
     assert set(os_after) == set(os_before)
@@ -547,7 +547,22 @@ def test_the_served_files_have_no_innerhtml_no_comments_and_no_outside_addresses
     assert "style=" not in files["index.html"]
 
 
-def test_an_unexpected_fault_gives_a_plain_json_error_not_a_traceback(app, monkeypatch):
+def test_the_overview_carries_the_figures_the_page_prints(app):
+    data = as_json(send(app, "GET", "/api/overview"))
+
+    assert data["window_days"] == serve_dashboard.overview.WINDOW_DAYS
+    assert data["recent_hours"] == serve_dashboard.overview.RECENT_HOURS
+    assert data["idea_chars"] == serve_dashboard.MAX_IDEA_CHARACTERS
+
+
+def test_the_page_checks_names_and_paths_with_the_same_patterns_as_the_server():
+    page = (WEB / "app.js").read_text(encoding="utf-8")
+
+    assert serve_dashboard.chat.PATH_OK.pattern in page
+    assert serve_dashboard.world.SAFE_NAME.pattern in page
+
+
+def test_an_unexpected_fault_gives_a_plain_json_error_not_a_traceback(app, monkeypatch, capsys):
     def broken(*args, **kwargs):
         raise RuntimeError("boom")
 
@@ -559,3 +574,4 @@ def test_an_unexpected_fault_gives_a_plain_json_error_not_a_traceback(app, monke
     assert "boom" not in response.body.decode()
     assert "Traceback" not in response.body.decode()
     assert "error" in as_json(response)
+    assert "RuntimeError: boom" in capsys.readouterr().err

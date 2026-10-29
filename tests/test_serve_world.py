@@ -1,6 +1,5 @@
 import json
 import sys
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import serve_dashboard
 import world
-from test_build_dashboard import make_os_dir
+from test_build_dashboard import make_index_dir
 from test_serve_dashboard import as_json, send, start, stop, tree_state
 from test_world import agent_line, command_line, make_agent, make_routine, make_skill, skill_line, write_transcript
 
@@ -26,18 +25,18 @@ def worldapp(tmp_path):
     project = tmp_path / "work" / "Atlas"
     project.mkdir(parents=True)
     make_routine(home, "weekly-check", f"Work in {project}.")
-    os_dir = make_os_dir(tmp_path, [("Atlas", project)], [("SEO", project / "reports" / "YYYY-MM-DD.md")], inbox="# Inbox\n\n- an idea\n")
+    index_dir = make_index_dir(tmp_path, [("Atlas", project)], [("SEO", project / "reports" / "YYYY-MM-DD.md")], inbox="# Inbox\n\n- an idea\n")
     write_transcript(home / "projects", "p/session.jsonl", [
         skill_line("ponytail-review"), skill_line("ponytail-review"), skill_line(SECRET),
         agent_line("reviewer"), command_line(SECRET), agent_line(SECRET),
         json.dumps({"type": "user", "message": {"content": f"private: {SECRET} password hunter2"}}),
     ])
-    server = serve_dashboard.make_server(os_dir, ports=[0], home=home)
+    server = serve_dashboard.make_server(index_dir, ports=[0], home=home)
     import threading
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield SimpleNamespace(
-        server=server, port=server.server_address[1], token=server.token, os_dir=os_dir, home=home, tmp=tmp_path,
-        inbox=os_dir / "INBOX.md",
+        server=server, port=server.server_address[1], token=server.token, index_dir=index_dir, home=home, tmp=tmp_path,
+        inbox=index_dir / "INBOX.md",
     )
     stop(server)
 
@@ -77,14 +76,14 @@ def test_the_project_key_in_the_world_opens_the_drill_down(worldapp):
 
 def test_the_world_and_scan_endpoints_need_the_token_and_the_host(worldapp):
     for path in ("/api/world", "/api/scan"):
-        assert send(worldapp, "GET", path, headers={"X-OS-Token": None}).status == 403
+        assert send(worldapp, "GET", path, headers={"X-Console-Token": None}).status == 403
         assert send(worldapp, "GET", path, headers={"Host": "evil.example"}).status == 403
         assert send(worldapp, "GET", path).status == 200
 
 
 SCAN_REFUSALS = [
-    ("no token", {"X-OS-Token": None}, 403),
-    ("wrong token", {"X-OS-Token": "x" * 43}, 403),
+    ("no token", {"X-Console-Token": None}, 403),
+    ("wrong token", {"X-Console-Token": "x" * 43}, 403),
     ("foreign origin", {"Origin": "http://evil.example"}, 403),
     ("origin null", {"Origin": "null"}, 403),
     ("wrong media type", {"Content-Type": "text/plain"}, 415),
@@ -202,8 +201,8 @@ def test_stopping_the_server_stops_the_scan_and_the_threads_do_not_outlive_it(tm
     for number in range(30):
         write_transcript(home / "projects", f"p/{number}.jsonl", [skill_line("no-ai-slop")] * 300)
     make_skill(home / "skills", "no-ai-slop")
-    os_dir = make_os_dir(tmp_path, [("Atlas", tmp_path)], [("SEO", tmp_path / "YYYY-MM-DD.md")])
-    server = start(os_dir) if False else serve_dashboard.make_server(os_dir, ports=[0], home=home)
+    index_dir = make_index_dir(tmp_path, [("Atlas", tmp_path)], [("SEO", tmp_path / "YYYY-MM-DD.md")])
+    server = start(index_dir) if False else serve_dashboard.make_server(index_dir, ports=[0], home=home)
     server.world_view()
     server.scan.start()
 

@@ -1,11 +1,7 @@
-"""Builds dashboard.html, a snapshot of the work folders and reports named in the CLAUDE.md index next to this script.
-
-It reads only: git log and status (never anything that changes a repo), file modified times and the
-inbox. The one file it writes is dashboard.html next to this script, replaced in one step.
-"""
+"""Reads the work folders and reports named in the CLAUDE.md index: git log and status (never anything that changes a repo),
+file modified times and the inbox. It writes nothing."""
 
 import fnmatch
-import html
 import os
 import re
 import subprocess
@@ -26,6 +22,8 @@ DIRTY_SHOWN = 5
 DIRTY_LINE_CAP = 160
 RECENT_HOURS = 24
 RECENT_SHOWN = 10
+COMMITS_SHOWN = 50
+LINES_SHOWN = 100
 HIDDEN_CATEGORIES = {"Cc", "Cf", "Zl", "Zp", "Cs"}
 
 
@@ -104,7 +102,8 @@ def parse_reports(text):
 
 
 def run_git(folder, *args):
-    command = ["git", "--no-optional-locks", *args]
+    # A repo's own config can name programs: core.fsmonitor runs on status, and gpg.program runs when log.showSignature is on.
+    command = ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", *args]
     try:
         return subprocess.run(
             command, cwd=folder, capture_output=True, text=True, encoding="utf-8",
@@ -115,6 +114,28 @@ def run_git(folder, *args):
         raise CouldNotRead(f"git timed out after {GIT_TIMEOUT_SECONDS} seconds in {folder}")
     except OSError as error:
         raise CouldNotRead(f"git could not start in {folder}: {error}")
+
+
+def git_detail(folder):
+    log = run_git(
+        folder, "-c", "core.quotepath=false",
+        "log", "-n", str(COMMITS_SHOWN), "--date=short", "--format=%h%x09%ad%x09%s",
+    )
+    empty = log.returncode != 0 and "does not have any commits yet" in log.stderr
+    if log.returncode != 0 and not empty:
+        raise CouldNotRead(f"git could not read the history of {folder}")
+    commits = []
+    for line in log.stdout.splitlines():
+        short, date, subject = (line.split("\t", 2) + ["", ""])[:3]
+        commits.append({"hash": short, "date": date, "subject": subject})
+    status = run_git(folder, "-c", "core.quotepath=false", "status", "--porcelain")
+    if status.returncode != 0:
+        raise CouldNotRead(f"git could not read the status of {folder}")
+    lines = [line for line in status.stdout.splitlines() if line.strip()]
+    return {
+        "commits": commits, "empty": empty,
+        "uncommitted": lines[:LINES_SHOWN], "uncommitted_total": len(lines),
+    }
 
 
 def changed_since_window(folder, now):
@@ -215,6 +236,14 @@ def read_report(label, location, fixed, now, pattern="*"):
     return card
 
 
+def read_index(index_dir):
+    """The index text, or a reason it could not be read."""
+    try:
+        return (Path(index_dir) / "CLAUDE.md").read_text(encoding="utf-8"), None
+    except OSError as error:
+        return None, f"{Path(index_dir) / 'CLAUDE.md'} could not be read: {error}"
+
+
 def read_inbox(inbox_path):
     try:
         text = inbox_path.read_text(encoding="utf-8")
@@ -228,139 +257,3 @@ def read_inbox(inbox_path):
         elif under_heading and line.startswith(("- ", "* ")):
             ideas.append(line[2:].strip())
     return ideas, None
-
-
-def esc(value):
-    return html.escape(str(value), quote=True)
-
-
-STYLE = """
-:root{color-scheme:light dark;--paper:#f6f3ec;--card:#fffdf8;--ink:#201d18;--quiet:#6b655a;--line:#ddd6c7;--accent:#2f5d50;--warn:#9a3b1e;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px}
-@media (prefers-color-scheme:dark){:root{--paper:#171613;--card:#201e1a;--ink:#ece7da;--quiet:#a39d8e;--line:#37342d;--accent:#8cc2af;--warn:#e89a7d}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 "Segoe UI",system-ui,sans-serif}
-main{max-width:72rem;margin:0 auto;padding:var(--s6) var(--s4)}
-h1{font-size:1.75rem;margin:0 0 var(--s2)}
-h2{font-size:1.125rem;margin:var(--s6) 0 var(--s3);padding-bottom:var(--s2);border-bottom:1px solid var(--line)}
-h3{font-size:1rem;margin:0}
-p{margin:0}
-.note{color:var(--quiet)}
-.grid{display:grid;gap:var(--s4);grid-template-columns:repeat(auto-fill,minmax(min(100%,17rem),1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);min-width:0}
-.path{font:0.8125rem/1.4 Consolas,"Cascadia Mono",ui-monospace,monospace;color:var(--quiet);overflow-wrap:anywhere}
-dl{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:var(--s1) var(--s4);margin:0}
-dt{color:var(--quiet)}
-dd{margin:0;text-align:right;font:600 1rem Consolas,"Cascadia Mono",ui-monospace,monospace}
-ul{margin:0;padding-left:var(--s5)}
-li{overflow-wrap:anywhere}
-.when{color:var(--quiet);font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:0.8125rem}
-.problem{border-color:var(--warn)}
-.problem h3,.problem .what{color:var(--warn)}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-"""
-
-
-def figures(pairs):
-    rows = "".join(f"<dt>{esc(label)}</dt><dd>{esc(value)}</dd>" for label, value in pairs)
-    return f"<dl>{rows}</dl>"
-
-
-def items(values):
-    return "<ul>" + "".join(f"<li>{value}</li>" for value in values) + "</ul>"
-
-
-def problem_card(card):
-    return (
-        '<article class="card problem">'
-        f"<h3>{esc(card['label'])}</h3>"
-        f'<p class="what">Could not read</p><p class="path">{esc(card["path"])}</p>'
-        f'<p class="note">{esc(card["error"])}</p></article>'
-    )
-
-
-def project_card(card):
-    if card["kind"] == "error":
-        return problem_card(card)
-    head = f"<h3>{esc(card['label'])}</h3>" f'<p class="path">{esc(card["path"])}</p>'
-    if card["kind"] == "git":
-        body = figures([(f"Commits, last {WINDOW_DAYS} days", card["commits"]), ("Uncommitted files", card["uncommitted"])])
-        if card["subjects"]:
-            body += items(esc(subject) for subject in card["subjects"])
-    else:
-        body = '<p class="note">No git here.</p>'
-        body += figures([(f"Files changed, last {WINDOW_DAYS} days", card["changed"])])
-        body += items(esc(name) for name in card["newest"]) if card["newest"] else '<p class="note">Nothing changed.</p>'
-    return f'<article class="card">{head}{body}</article>'
-
-
-def report_card(card):
-    if card["kind"] == "error":
-        return problem_card(card)
-    head = f"<h3>{esc(card['label'])}</h3>" f'<p class="path">{esc(card["path"])}</p>'
-    if card["kind"] == "fixed":
-        body = f'<p>{esc(card["name"])} <span class="when">{esc(card["date"])}</span></p>'
-    elif card["files"]:
-        body = items(f'{esc(name)} <span class="when">{esc(date)}</span>' for name, date in card["files"])
-    else:
-        body = f'<p class="note">Nothing in the last {WINDOW_DAYS} days.</p>'
-    return f'<article class="card">{head}{body}</article>'
-
-
-def inbox_card(ideas, error, inbox_path):
-    if error:
-        return problem_card({"label": "Inbox", "path": str(inbox_path), "error": error})
-    body = items(esc(idea) for idea in ideas) if ideas else '<p class="note">Empty.</p>'
-    return f'<article class="card">{body}</article>'
-
-
-def build_page(os_dir, now):
-    index_path = os_dir / "CLAUDE.md"
-    inbox_path = os_dir / "INBOX.md"
-    index_problem = None
-    try:
-        text = index_path.read_text(encoding="utf-8")
-    except OSError as error:
-        text = None
-        index_problem = f"{index_path} could not be read: {error}"
-
-    def index_cards(parse, make_card):
-        if text is None:
-            return [problem_card({"label": "Could not read the index", "path": str(index_path), "error": index_problem})]
-        try:
-            return [make_card(row) for row in parse(text)]
-        except CouldNotRead as error:
-            return [problem_card({"label": "Could not read the index", "path": str(index_path), "error": str(error)})]
-
-    project_cards = index_cards(parse_projects, lambda row: project_card(read_project(row[0], row[1], now)))
-    report_cards = index_cards(parse_reports, lambda row: report_card(read_report(row[0], row[1], row[2], now, row[3] or "*")))
-    ideas, inbox_error = read_inbox(inbox_path)
-
-    stamp = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M")
-    return (
-        '<!doctype html><html lang="en-GB"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>Work overview</title><style>{STYLE}</style></head><body><main>"
-        f'<h1>Work overview</h1><p class="note">Snapshot taken {esc(stamp)}. Run build_dashboard.py again to refresh it.</p>'
-        f'<h2>Projects</h2><div class="grid">{"".join(project_cards)}</div>'
-        f'<h2>Reports</h2><div class="grid">{"".join(report_cards)}</div>'
-        f'<h2>Inbox</h2><div class="grid">{inbox_card(ideas, inbox_error, inbox_path)}</div>'
-        "</main></body></html>"
-    )
-
-
-def run(os_dir=CODE_DIR):
-    """Write dashboard.html in os_dir and return its path. The output path is never taken from the caller."""
-    os_dir = Path(os_dir)
-    page = build_page(os_dir, time.time())
-    output = os_dir / "dashboard.html"
-    temporary = os_dir / "dashboard.html.tmp"
-    try:
-        temporary.write_text(page, encoding="utf-8")
-        os.replace(temporary, output)
-    finally:
-        temporary.unlink(missing_ok=True)
-    return output
-
-
-if __name__ == "__main__":
-    print(run())

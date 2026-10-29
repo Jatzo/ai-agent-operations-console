@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chat
 import serve_dashboard
-from test_build_dashboard import make_os_dir
+from test_build_dashboard import make_index_dir
 from test_serve_dashboard import as_json, send, stop, tree_state
 from test_world import make_skill
 
@@ -39,20 +39,20 @@ def build(tmp_path, monkeypatch, tested=True, **limits):
     make_skill(home / "skills", "alpha", description="An alpha skill.")
     project = tmp_path / "work" / "Atlas"
     project.mkdir(parents=True)
-    os_dir = make_os_dir(tmp_path, [("Atlas", project)], [("SEO", project / "reports" / "YYYY-MM-DD.md")], inbox="# Inbox\n\n- an idea\n")
+    index_dir = make_index_dir(tmp_path, [("Atlas", project)], [("SEO", project / "reports" / "YYYY-MM-DD.md")], inbox="# Inbox\n\n- an idea\n")
     monkeypatch.setenv("FAKE_PIDFILE", str(tmp_path / "pid.txt"))
     monkeypatch.setenv("FAKE_ARGSFILE", str(tmp_path / "args.json"))
     base = {"min_gap_seconds": 0, "heartbeat_seconds": 60}
     base.update(limits)
     manager = chat.ChatManager(
-        os_dir, home, lambda: serve_dashboard.indexed_projects(os_dir), launcher=[sys.executable, "-I", FAKE],
+        index_dir, home, lambda: serve_dashboard.indexed_projects(index_dir), launcher=[sys.executable, "-I", FAKE],
         executable="C:/fake/claude.exe", version=lambda: "1.2.3",
         tested=lambda: {"1.2.3"} if tested else set(), limits=base,
     )
-    server = serve_dashboard.make_server(os_dir, ports=[0], home=home, chat_manager=manager)
+    server = serve_dashboard.make_server(index_dir, ports=[0], home=home, chat_manager=manager)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return SimpleNamespace(
-        server=server, port=server.server_address[1], token=server.token, os_dir=os_dir, home=home, tmp=tmp_path,
+        server=server, port=server.server_address[1], token=server.token, index_dir=index_dir, home=home, tmp=tmp_path,
         project=project, manager=manager,
     )
 
@@ -101,6 +101,7 @@ def test_the_status_endpoint_reports_readiness_the_version_and_cost(chatapp):
 
     assert status["ready"] is True and status["version"] == "1.2.3" and status["running"] is False
     assert status["session_cost"] == 0
+    assert status["model"] == chat.MODEL.capitalize() and status["budget_usd"] == chat.BUDGET_USD and status["message_chars"] == chat.MESSAGE_CAP
 
 
 @pytest.mark.parametrize(
@@ -109,7 +110,7 @@ def test_the_status_endpoint_reports_readiness_the_version_and_cost(chatapp):
 def test_every_chat_endpoint_needs_the_token(chatapp, path, method):
     body = b"{}" if method == "POST" else b""
 
-    response = send(chatapp, method, path, headers={"X-OS-Token": "wrong"}, body=body)
+    response = send(chatapp, method, path, headers={"X-Console-Token": "wrong"}, body=body)
 
     assert response.status == 403
     assert not (chatapp.tmp / "pid.txt").exists()
@@ -208,7 +209,7 @@ def test_the_page_cannot_supply_a_folder_a_flag_or_a_command(chatapp):
     seen = args(chatapp)
 
     assert response.status == 200
-    assert Path(seen["cwd"]).resolve() == chatapp.os_dir.resolve()
+    assert Path(seen["cwd"]).resolve() == chatapp.index_dir.resolve()
     assert "--dangerously-skip-permissions" not in seen["argv"] and "Bash" not in " ".join(seen["argv"])
     assert seen["argv"][seen["argv"].index("--model") + 1] == "sonnet"
     assert "--add-dir" not in seen["argv"]
@@ -279,7 +280,7 @@ def test_a_dropped_connection_kills_the_running_message(tmp_path, monkeypatch):
     try:
         body = json.dumps({"message": "Hi"}).encode("utf-8")
         head = (
-            f"POST /api/chat HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nX-OS-Token: {app.token}\r\n"
+            f"POST /api/chat HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nX-Console-Token: {app.token}\r\n"
             f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n"
         ).encode("utf-8")
         connection = socket.create_connection(("127.0.0.1", app.port), timeout=10)
@@ -323,8 +324,8 @@ def test_without_a_tested_version_chat_is_refused_by_the_endpoint(tmp_path, monk
 
 
 def test_the_real_manager_refuses_when_the_version_file_is_missing(tmp_path):
-    os_dir = make_os_dir(tmp_path, [], [])
-    server = serve_dashboard.make_server(os_dir, ports=[0], home=tmp_path / "home")
+    index_dir = make_index_dir(tmp_path, [], [])
+    server = serve_dashboard.make_server(index_dir, ports=[0], home=tmp_path / "home")
     try:
         assert server.chat.status()["ready"] is False
     finally:
@@ -339,7 +340,7 @@ def test_the_world_endpoint_and_the_static_table_are_unchanged_by_chat(chatapp):
 
 def test_after_a_chat_with_every_kind_of_node_nothing_on_disk_has_changed(chatapp, monkeypatch):
     skip = {"pid.txt", "args.json"}
-    folders = [chatapp.os_dir, chatapp.home, chatapp.project]
+    folders = [chatapp.index_dir, chatapp.home, chatapp.project]
     before = [{k: v for k, v in tree_state(f).items() if k not in skip} for f in folders]
 
     post_chat(chatapp, {"message": "Hi"})

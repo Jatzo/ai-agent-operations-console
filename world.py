@@ -23,6 +23,8 @@ MAX_IDEAS = 40
 TEXT_LINKS_PER_NODE = 6
 READ_CAP_BYTES = 200_000
 LABEL_CAP = 80
+SCAN_MIN_INTERVAL_SECONDS = 30
+HIDDEN_CATEGORIES = overview.HIDDEN_CATEGORIES
 DESCRIPTION_CAP = 300
 SAFE_NAME = re.compile(r"[a-z0-9:_-]{1,64}")
 PRIORITY = ["project", "routine", "report", "hub", "idea", "agent", "skill:global", "skill:project", "skill:plugin"]
@@ -43,6 +45,17 @@ def clean(value, limit):
             out.append(character)
     text = re.sub(r"\s+", " ", "".join(out)).strip()
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+PATH_CAP = 1000
+
+
+def clean_path(value):
+    """The path as written, so it still resolves. One with a control or invisible character, or over PATH_CAP, is refused as empty."""
+    text = str(value)
+    if len(text) > PATH_CAP or any(unicodedata.category(character) in HIDDEN_CATEGORIES for character in text):
+        return ""
+    return text
 
 
 def read_text(path):
@@ -86,7 +99,7 @@ def make_node(node_type, scope, name, label=None, description="", path="", **ext
         "name": clean(name, LABEL_CAP),
         "label": clean(label if label is not None else name, LABEL_CAP),
         "desc": clean(description, DESCRIPTION_CAP),
-        "path": clean(path, 260),
+        "path": clean_path(path),
         "safe": bool(SAFE_NAME.fullmatch(str(name))),
     }
     node.update(extra)
@@ -213,34 +226,44 @@ def find_mentions(text, patterns):
     return found
 
 
-def build_world(home, os_dir, now=None):
+def build_world(home, index_dir, now=None):
     """The world as plain data: {'nodes', 'edges', 'cut', 'generated'}. Reads only."""
-    home, os_dir = Path(home), Path(os_dir)
-    index_text, _ = overview_index(os_dir)
+    home, index_dir = Path(home), Path(index_dir)
+    index_text, _ = overview.read_index(index_dir)
     project_rows = report_rows = []
-    problems = []
     if index_text is not None:
+        # An index the overview cannot read is reported by its banner, so the map just has no projects or reports.
         try:
             project_rows = overview.parse_projects(index_text)
-        except overview.CouldNotRead as error:
-            problems.append(str(error))
+        except overview.CouldNotRead:
+            pass
         try:
             report_rows = overview.parse_reports(index_text)
-        except overview.CouldNotRead as error:
-            problems.append(str(error))
+        except overview.CouldNotRead:
+            pass
 
     nodes = []
+    used_ids = set()
+
+    def distinct(node, key):
+        """Index rows with the same label would share an id, so each later one is told apart by its own key."""
+        while node["id"] in used_ids:
+            node["id"] += "#" + key[:6]
+        used_ids.add(node["id"])
+        return node
+
     for label, folder in project_rows:
         claude = read_text(Path(folder) / "CLAUDE.md")
-        nodes.append(make_node("project", "index", label, description=f"Work folder {folder}", path=str(folder), text=claude, key=project_id(label, folder)))
+        key = project_id(label, folder)
+        nodes.append(distinct(make_node("project", "index", label, description=f"Work folder {folder}", path=str(folder), text=claude, key=key), key))
     for label, location, fixed, pattern in report_rows:
-        nodes.append(make_node("report", "index", label, description="Report location", path=str(location)))
+        nodes.append(distinct(make_node("report", "index", label, description="Report location", path=str(location)), project_id(label, location)))
     routines = collect_routines(home)
     nodes += routines
     skills = collect_skills(home, project_rows)
     agents = collect_agents(home)
-    ideas, _ = overview.read_inbox(os_dir / "INBOX.md")
-    hub_inbox = make_node("hub", "inbox", "inbox", label="Inbox", description="Ideas waiting in INBOX.md", path=str(os_dir / "INBOX.md"))
+    ideas, _ = overview.read_inbox(index_dir / "INBOX.md")
+    hub_inbox = make_node("hub", "inbox", "inbox", label="Inbox", description="Ideas waiting in INBOX.md", path=str(index_dir / "INBOX.md"))
     nodes.append(hub_inbox)
     hubs = {}
     for scope in sorted({node["scope"] for node in skills if not node["scope"].startswith("project:")}):
@@ -310,7 +333,7 @@ def build_world(home, os_dir, now=None):
     return {
         "generated": datetime.fromtimestamp(now or time.time()).strftime("%H:%M:%S"),
         "nodes": nodes, "edges": edge_list,
-        "cut": {"nodes": 0, "edges": 0}, "problems": problems,
+        "cut": {"nodes": 0, "edges": 0},
     }
 
 
@@ -334,13 +357,6 @@ def cap_world(data):
     return {**data, "nodes": nodes, "edges": edges[:MAX_EDGES], "cut": {"nodes": cut_nodes, "edges": cut_edges}}
 
 
-def overview_index(os_dir):
-    try:
-        return (Path(os_dir) / "CLAUDE.md").read_text(encoding="utf-8"), None
-    except OSError as error:
-        return None, str(error)
-
-
 def usage_keys(world):
     """Lookup tables from a name as written in a transcript to a node id, for skills and for agents."""
     skill_keys, agent_keys = {}, {}
@@ -349,11 +365,11 @@ def usage_keys(world):
         if node["type"] == "skill":
             skill_keys.setdefault(node["name"].lower(), node["id"])
             if node["scope"].startswith("plugin:"):
-                skill_keys.setdefault(f"{node['scope'][7:]}:{node['name']}".lower(), node["id"])
+                skill_keys.setdefault(f"{node['scope'].removeprefix('plugin:')}:{node['name']}".lower(), node["id"])
         elif node["type"] == "agent":
             agent_keys.setdefault(node["name"].lower(), node["id"])
             if node["scope"].startswith("plugin:"):
-                agent_keys.setdefault(f"{node['scope'][7:]}:{node['name']}".lower(), node["id"])
+                agent_keys.setdefault(f"{node['scope'].removeprefix('plugin:')}:{node['name']}".lower(), node["id"])
     return skill_keys, agent_keys
 
 
@@ -370,7 +386,7 @@ class UsageScan:
     from a transcript but a count for a known node is ever kept. Results stay in memory.
     """
 
-    def __init__(self, transcripts, skill_keys, agent_keys, time_cap=300, byte_cap=8 * 2**30, min_interval=30):
+    def __init__(self, transcripts, skill_keys, agent_keys, time_cap=300, byte_cap=8 * 2**30, min_interval=SCAN_MIN_INTERVAL_SECONDS):
         self.transcripts = Path(transcripts)
         self.skill_keys, self.agent_keys = skill_keys, agent_keys
         self.time_cap, self.byte_cap, self.min_interval = time_cap, byte_cap, min_interval

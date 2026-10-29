@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="os-token" content="{{token}}">
+<meta name="console-token" content="{{token}}">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#050810">
 <title>AI agent operations console</title>
@@ -85,13 +85,13 @@
 </div>
 <div class="detail pane" id="detail" role="tabpanel" aria-labelledby="tab-details"></div>
 <div class="pane" id="chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
-<p class="chip" id="chat-chip">General chat · read only · Sonnet · files Claude reads are sent to Anthropic</p>
+<p class="chip" id="chat-chip">General chat · read only · files Claude reads are sent to Anthropic</p>
 <p><span class="ro">Read only</span></p>
 <p class="msg-note bad" id="chat-problem" role="status" hidden></p>
 <div id="chat-log" role="log" aria-label="Conversation" aria-live="off" aria-busy="false" tabindex="0"></div>
 <form id="chat-form" autocomplete="off">
 <label class="sr" for="chat-input">Message Claude</label>
-<textarea id="chat-input" maxlength="4000" rows="3" placeholder="Ask a question (Ctrl+Enter sends)"></textarea>
+<textarea id="chat-input" rows="3" placeholder="Ask a question (Ctrl+Enter sends)"></textarea>
 <div class="chat-actions">
 <button type="submit" class="tool" id="chat-send">Send</button>
 <button type="button" class="tool" id="chat-stop" hidden>Stop</button>
@@ -131,7 +131,7 @@
 <form id="add-form" class="add-form">
 <label for="idea">Add an idea</label>
 <div class="row">
-<input id="idea" name="idea" type="text" maxlength="300" autocomplete="off" required>
+<input id="idea" name="idea" type="text" autocomplete="off" required>
 <button type="submit" class="tool">Add</button>
 </div>
 <p class="note" id="add-status" role="status"></p>

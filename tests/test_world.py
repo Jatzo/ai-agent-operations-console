@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import world
-from test_build_dashboard import make_os_dir
+from test_build_dashboard import make_index_dir
 
 HOSTILE = "<script>alert(1)</script>"
 
@@ -42,13 +42,13 @@ def lab(tmp_path):
     ops = work / "Ops"
     for folder in (atlas, ops):
         folder.mkdir(parents=True)
-    os_dir = make_os_dir(
+    index_dir = make_index_dir(
         tmp_path,
         [("Atlas", atlas), ("Ops", ops)],
         [("SEO", atlas / "reports" / "seo" / "YYYY-MM-DD.md"), ("Elsewhere", tmp_path / "other" / "YYYY-MM-DD.md")],
         inbox="# Inbox\n\n- first idea\n- second idea\n",
     )
-    return type("Lab", (), {"home": home, "os_dir": os_dir, "atlas": atlas, "ops": ops, "tmp": tmp_path})
+    return type("Lab", (), {"home": home, "index_dir": index_dir, "atlas": atlas, "ops": ops, "tmp": tmp_path})
 
 
 def by_id(data):
@@ -64,7 +64,7 @@ def test_the_world_has_a_node_for_each_kind_and_every_link_joins_two_real_nodes(
     make_agent(lab.home, "scout")
     make_routine(lab.home, "weekly-check", f"Work in {lab.atlas}. Save to {lab.atlas}/reports/seo/2026-10-01.md")
 
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     kinds = {node["type"] for node in data["nodes"]}
     ids = [node["id"] for node in data["nodes"]]
@@ -79,7 +79,7 @@ def test_a_project_skill_and_a_global_skill_with_the_same_name_stay_distinct(lab
     make_skill(lab.home / "skills", "deploy")
     make_skill(lab.atlas / ".claude" / "skills", "deploy")
 
-    nodes = by_id(world.build_world(lab.home, lab.os_dir))
+    nodes = by_id(world.build_world(lab.home, lab.index_dir))
 
     assert "skill:global:deploy" in nodes
     assert "skill:project:Atlas:deploy" in nodes
@@ -89,7 +89,7 @@ def test_a_project_skill_hangs_off_its_project_and_global_skills_off_a_group_hub
     make_skill(lab.home / "skills", "alpha")
     make_skill(lab.atlas / ".claude" / "skills", "local-one")
 
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     members = edge_pairs(data, "member")
     project_id = next(node["id"] for node in data["nodes"] if node["type"] == "project" and node["name"] == "Atlas")
@@ -107,7 +107,7 @@ def test_plugin_skills_and_agents_come_from_the_installed_plugins_list(lab):
     stray = lab.tmp / "plug" / "ecc" / "0.9"
     make_skill(stray / "skills", "old-copy")
 
-    nodes = by_id(world.build_world(lab.home, lab.os_dir))
+    nodes = by_id(world.build_world(lab.home, lab.index_dir))
 
     assert "skill:plugin:ecc:plan" in nodes
     assert "agent:plugin:ecc:security-reviewer" in nodes
@@ -139,7 +139,7 @@ def test_binary_junk_and_a_huge_file_give_a_node_and_never_an_error(lab):
     huge.mkdir()
     (huge / "SKILL.md").write_text("---\nname: huge\ndescription: " + "x" * 400_000 + "\n---\n", encoding="utf-8")
 
-    nodes = by_id(world.build_world(lab.home, lab.os_dir))
+    nodes = by_id(world.build_world(lab.home, lab.index_dir))
 
     assert "skill:global:junk" in nodes
     assert len(nodes["skill:global:huge"]["desc"]) <= 300
@@ -148,7 +148,7 @@ def test_binary_junk_and_a_huge_file_give_a_node_and_never_an_error(lab):
 def test_a_hostile_description_is_cleaned_and_capped(lab):
     make_skill(lab.home / "skills", "evil", description=HOSTILE + "\x07\x1b[31m red" + "a" * 10_000 + "\u200b\u202e")
 
-    desc = by_id(world.build_world(lab.home, lab.os_dir))["skill:global:evil"]["desc"]
+    desc = by_id(world.build_world(lab.home, lab.index_dir))["skill:global:evil"]["desc"]
 
     assert len(desc) <= 300
     assert "\x07" not in desc and "\x1b" not in desc and "\u200b" not in desc and "\u202e" not in desc
@@ -159,7 +159,7 @@ def test_a_name_that_is_not_safe_for_a_prompt_is_marked_unsafe(lab):
     make_skill(lab.home / "skills", "good-name")
     make_skill(lab.home / "skills", "Bad Name; rm")
 
-    nodes = by_id(world.build_world(lab.home, lab.os_dir))
+    nodes = by_id(world.build_world(lab.home, lab.index_dir))
 
     assert nodes["skill:global:good-name"]["safe"] is True
     assert nodes["skill:global:Bad Name; rm"]["safe"] is False
@@ -174,7 +174,7 @@ def test_a_bare_word_does_not_link_but_a_backticked_name_does(lab):
     make_skill(lab.home / "skills", "source", body="We go next. Then `next` runs.")
     make_skill(lab.home / "skills", "quiet", body="We go next and carry on.")
 
-    links = mention_links(world.build_world(lab.home, lab.os_dir))
+    links = mention_links(world.build_world(lab.home, lab.index_dir))
 
     assert ("skill:global:source", "skill:global:next") in links
     assert not any(a == "skill:global:quiet" for a, _ in links)
@@ -198,7 +198,7 @@ def test_only_written_forms_of_a_name_make_a_link(lab, body, linked):
     make_skill(lab.home / "skills", "target")
     make_skill(lab.home / "skills", "source", body=body)
 
-    links = mention_links(world.build_world(lab.home, lab.os_dir))
+    links = mention_links(world.build_world(lab.home, lab.index_dir))
 
     assert (("skill:global:source", "skill:global:target") in links) is linked
 
@@ -208,7 +208,7 @@ def test_a_name_with_a_longer_name_around_it_links_to_the_right_one(lab):
     make_skill(lab.home / "skills", "ponytail-review")
     make_skill(lab.home / "skills", "source", body="Use `ponytail-review` first.")
 
-    links = mention_links(world.build_world(lab.home, lab.os_dir))
+    links = mention_links(world.build_world(lab.home, lab.index_dir))
 
     assert ("skill:global:source", "skill:global:ponytail-review") in links
     assert ("skill:global:source", "skill:global:ponytail") not in links
@@ -220,7 +220,7 @@ def test_the_word_agent_prefers_an_agent_and_a_skill_prefers_a_skill(lab):
     make_skill(lab.home / "skills", "uses-agent", body="Ask the agent reviewer.")
     make_skill(lab.home / "skills", "uses-skill", body="Run the skill reviewer.")
 
-    links = mention_links(world.build_world(lab.home, lab.os_dir))
+    links = mention_links(world.build_world(lab.home, lab.index_dir))
 
     assert ("skill:global:uses-agent", "agent:global:reviewer") in links
     assert ("skill:global:uses-skill", "skill:global:reviewer") in links
@@ -229,7 +229,7 @@ def test_the_word_agent_prefers_an_agent_and_a_skill_prefers_a_skill(lab):
 def test_a_skill_that_mentions_itself_makes_no_link(lab):
     make_skill(lab.home / "skills", "loop", body="`loop` calls `loop`.")
 
-    assert not mention_links(world.build_world(lab.home, lab.os_dir))
+    assert not mention_links(world.build_world(lab.home, lab.index_dir))
 
 
 def test_no_node_ever_has_more_than_six_text_links_however_popular_it_is(lab):
@@ -237,7 +237,7 @@ def test_no_node_ever_has_more_than_six_text_links_however_popular_it_is(lab):
     for number in range(15):
         make_skill(lab.home / "skills", f"source-{number}", body="Uses `hub`.")
 
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     degree = {}
     for a, b in mention_links(data):
@@ -252,7 +252,7 @@ def test_a_project_links_to_skills_its_claude_md_names_and_a_routine_to_what_it_
     (lab.atlas / "CLAUDE.md").write_text("Finish with `commit-local`.", encoding="utf-8")
     make_routine(lab.home, "weekly-check", f"Work in {lab.atlas}. Use skills/commit-local/SKILL.md. Save to {lab.atlas}/reports/seo/2026-10-01.md")
 
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     project = next(node["id"] for node in data["nodes"] if node["type"] == "project" and node["name"] == "Atlas")
     assert (project, "skill:global:commit-local") in mention_links(data)
@@ -262,7 +262,7 @@ def test_a_project_links_to_skills_its_claude_md_names_and_a_routine_to_what_it_
 
 
 def test_a_report_inside_a_project_folder_hangs_off_that_project_and_one_outside_does_not(lab):
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     holds = edge_pairs(data, "holds")
     project = next(node["id"] for node in data["nodes"] if node["type"] == "project" and node["name"] == "Atlas")
@@ -270,8 +270,47 @@ def test_a_report_inside_a_project_folder_hangs_off_that_project_and_one_outside
     assert not any(b == "report:index:Elsewhere" for _, b in holds)
 
 
+def test_two_index_rows_with_the_same_label_get_their_own_nodes(tmp_path):
+    first, second = tmp_path / "a" / "Site", tmp_path / "b" / "Site"
+    for folder in (first, second):
+        folder.mkdir(parents=True)
+    index_dir = make_index_dir(tmp_path, [("Site", first), ("Site", second)], [("Notes", first / "YYYY-MM-DD.md"), ("Notes", second / "YYYY-MM-DD.md")])
+    home = tmp_path / "home"
+    home.mkdir()
+
+    data = world.build_world(home, index_dir)
+
+    projects = [node for node in data["nodes"] if node["type"] == "project"]
+    reports = [node for node in data["nodes"] if node["type"] == "report"]
+    assert len({node["id"] for node in projects}) == 2 and {node["path"] for node in projects} == {str(first), str(second)}
+    assert len({node["id"] for node in reports}) == 2
+    holds = edge_pairs(data, "holds")
+    for project in projects:
+        owned = [b for a, b in holds if a == project["id"]]
+        assert len(owned) == 1 and next(r for r in reports if r["id"] == owned[0])["path"].startswith(project["path"])
+
+
+def test_a_row_listed_three_times_still_gets_three_ids(tmp_path):
+    folder = tmp_path / "Site"
+    folder.mkdir()
+    index_dir = make_index_dir(tmp_path, [("Site", folder)] * 3, [("Notes", folder / "YYYY-MM-DD.md")])
+    home = tmp_path / "home"
+    home.mkdir()
+
+    data = world.build_world(home, index_dir)
+
+    ids = [node["id"] for node in data["nodes"] if node["type"] == "project"]
+    assert len(ids) == 3 and len(set(ids)) == 3
+
+
+def test_a_node_path_keeps_its_own_spaces_and_a_path_with_a_control_character_is_refused():
+    assert world.make_node("skill", "global", "x", path="C:/Users/Joe  Smith/skills/x")["path"] == "C:/Users/Joe  Smith/skills/x"
+    assert world.make_node("skill", "global", "x", path="C:/a" + chr(0) + "b")["path"] == ""
+    assert world.make_node("skill", "global", "x", path="C:/" + "a" * 1200)["path"] == ""
+
+
 def test_inbox_ideas_hang_off_the_inbox_hub(lab):
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     ideas = edge_pairs(data, "idea")
     assert ("hub:inbox:inbox", "idea:inbox:0") in ideas and ("hub:inbox:inbox", "idea:inbox:1") in ideas
@@ -283,7 +322,7 @@ def test_when_there_are_too_many_nodes_the_least_important_are_cut_and_the_world
     make_agent(lab.home, "scout")
     monkeypatch.setattr(world, "MAX_NODES", 15)
 
-    data = world.cap_world(world.build_world(lab.home, lab.os_dir))
+    data = world.cap_world(world.build_world(lab.home, lab.index_dir))
 
     kinds = [node["type"] for node in data["nodes"]]
     assert len(data["nodes"]) == 15
@@ -322,7 +361,7 @@ def scan_lab(lab):
     make_skill(lab.home / "skills", "ponytail-review")
     make_skill(lab.home / "skills", "no-ai-slop")
     make_agent(lab.home, "reviewer")
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
     skill_keys, agent_keys = world.usage_keys(data)
     transcripts = lab.tmp / "transcripts"
     scan = world.UsageScan(transcripts, skill_keys, agent_keys, min_interval=0)
@@ -374,7 +413,7 @@ def test_a_prefixed_plugin_name_counts_for_the_plugin_skill(lab):
     (lab.home / "plugins").mkdir()
     listing = {"plugins": {"ecc@market": [{"installPath": str(install)}]}}
     (lab.home / "plugins" / "installed_plugins.json").write_text(json.dumps(listing), encoding="utf-8")
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
     skill_keys, agent_keys = world.usage_keys(data)
     transcripts = lab.tmp / "t"
     write_transcript(transcripts, "a.jsonl", [skill_line("ecc:plan"), skill_line("plan")])
@@ -459,7 +498,7 @@ def test_building_the_world_and_scanning_write_nothing_anywhere(scan_lab):
     write_transcript(scan_lab.transcripts, "p/a.jsonl", [skill_line("no-ai-slop")])
     before = tree(scan_lab.lab.tmp)
 
-    world.build_world(scan_lab.lab.home, scan_lab.lab.os_dir)
+    world.build_world(scan_lab.lab.home, scan_lab.lab.index_dir)
     run_scan(scan_lab.scan)
 
     assert tree(scan_lab.lab.tmp) == before
@@ -480,7 +519,7 @@ def test_use_counts_are_merged_onto_a_copy_and_unused_nodes_get_zero(scan_lab):
 def test_the_cap_keeps_a_used_skill_over_an_unused_one_of_the_same_kind(lab, monkeypatch):
     for number in range(20):
         make_skill(lab.home / "skills", f"skill-{number}")
-    base = world.build_world(lab.home, lab.os_dir)
+    base = world.build_world(lab.home, lab.index_dir)
     used = world.with_usage(base, {"counts": {"skill:global:skill-19": [5, "2026-10-20"]}})
     monkeypatch.setattr(world, "MAX_NODES", len(base["nodes"]) - 5)
 
@@ -520,7 +559,7 @@ def test_the_cap_keeps_a_used_skill_ahead_of_unused_agents_and_unused_skills(lab
     for number in range(10):
         make_skill(lab.home / "skills", f"skill-{number}")
         make_agent(lab.home, f"scout-{number}")
-    base = world.build_world(lab.home, lab.os_dir)
+    base = world.build_world(lab.home, lab.index_dir)
     used = world.with_usage(base, {"counts": {"skill:global:skill-3": [4, "2026-10-20"]}})
     important = [node for node in base["nodes"] if node["type"] in ("project", "routine", "report", "hub", "idea")]
     monkeypatch.setattr(world, "MAX_NODES", len(important) + 1)
@@ -540,7 +579,7 @@ def test_a_hostile_two_hundred_kilobyte_skill_file_is_handled_quickly(lab):
     (folder / "SKILL.md").write_text("---\nname: evil\ndescription: x\n---\n" + hostile[:200_000], encoding="utf-8")
     started = time.monotonic()
 
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     assert time.monotonic() - started < 5
     assert "skill:global:evil" in by_id(data)
@@ -553,7 +592,7 @@ def test_a_plugin_name_with_direction_marks_is_cleaned_in_the_scope_and_the_id(l
     listing = {"plugins": {"ec‮c@market": [{"installPath": str(install)}]}}
     (lab.home / "plugins" / "installed_plugins.json").write_text(json.dumps(listing), encoding="utf-8")
 
-    data = world.build_world(lab.home, lab.os_dir)
+    data = world.build_world(lab.home, lab.index_dir)
 
     plugin_nodes = [node for node in data["nodes"] if node["scope"].startswith("plugin:")]
     assert plugin_nodes

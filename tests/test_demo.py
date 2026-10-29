@@ -1,5 +1,3 @@
-import json
-import socket
 import subprocess
 import sys
 import threading
@@ -12,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import chat
 import demo
 import serve_dashboard
-from test_serve_dashboard import as_json, send, stop
+from test_serve_dashboard import stop
 
 
 @pytest.fixture

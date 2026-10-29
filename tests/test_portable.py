@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chat
 import serve_dashboard
-from test_build_dashboard import make_os_dir
+from test_build_dashboard import make_index_dir
 
 
 def test_the_real_claude_folder_is_private_even_when_home_points_somewhere_else(tmp_path):
@@ -36,25 +36,25 @@ def test_an_ordinary_folder_is_not_private(tmp_path):
 def test_an_index_entry_for_the_real_claude_folder_never_becomes_a_working_folder(tmp_path):
     home = tmp_path / "other-home"
     home.mkdir()
-    os_dir = tmp_path / "os"
-    os_dir.mkdir()
+    index_dir = tmp_path / "os"
+    index_dir.mkdir()
     real = Path.home() / ".claude"
     if not real.exists():
         return
 
     context = chat.resolve_context(
         {"id": "project:index:x", "type": "project", "name": "x", "label": "x", "path": str(real)},
-        os_dir=os_dir, home=home, projects=[real],
+        index_dir=index_dir, home=home, projects=[real],
     )
 
-    assert context.cwd == os_dir
+    assert context.cwd == index_dir
 
 
 def test_the_server_reads_the_gate_file_from_the_code_folder_not_from_the_index_folder(tmp_path, monkeypatch):
     code = tmp_path / "code"
     code.mkdir()
     (code / serve_dashboard.TESTED_VERSION_FILE).write_text("9.9.9\n", encoding="utf-8")
-    root = make_os_dir(tmp_path, [("Atlas", tmp_path)])
+    root = make_index_dir(tmp_path, [("Atlas", tmp_path)])
     (root / serve_dashboard.TESTED_VERSION_FILE).write_text("1.1.1\n", encoding="utf-8")
     monkeypatch.setattr(serve_dashboard, "CODE_DIR", code)
 
@@ -71,6 +71,18 @@ def test_the_gate_script_writes_the_file_the_server_reads():
     assert serve_dashboard.TESTED_VERSION_FILE in gate_source
     assert "CODE_DIR = Path(__file__).resolve().parent.parent" in gate_source
     assert serve_dashboard.CODE_DIR == Path(serve_dashboard.__file__).resolve().parent
+
+
+def test_starting_with_the_private_claude_folder_as_the_index_is_refused(tmp_path, capsys, monkeypatch):
+    home = tmp_path / ".claude"
+    home.mkdir()
+    (home / "CLAUDE.md").write_text("# Index\n", encoding="utf-8")
+    monkeypatch.setattr(serve_dashboard, "make_server", lambda *args, **kwargs: pytest.fail("the server must not start"))
+
+    code = serve_dashboard.main(["--root", str(home), "--home", str(home)])
+
+    assert code == 2
+    assert "private Claude data" in capsys.readouterr().err
 
 
 def test_starting_without_an_index_says_what_to_do_and_starts_nothing(tmp_path, capsys):

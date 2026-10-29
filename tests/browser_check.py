@@ -3,14 +3,12 @@
 Run it from PowerShell:  python tests\browser_check.py <folder for screenshots>
 It needs Playwright and Edge (see requirements-dev.txt). It builds the demo world with demo.build_world, so it
 never reads your own folders, and the chat is answered by tests\fake_claude.py, so nothing real is called.
-The design detector is optional: set OS_DETECTOR to its command to run it, or leave it unset to skip it.
+The design detector is optional: set CONSOLE_DETECTOR to its command to run it, or leave it unset to skip it.
 """
 
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -24,7 +22,7 @@ import demo
 import serve_dashboard
 
 REAL = Path(__file__).resolve().parent.parent
-DETECTOR = os.environ.get("OS_DETECTOR")
+DETECTOR = os.environ.get("CONSOLE_DETECTOR")
 SIZES = ((375, 812), (1440, 900))
 failures = []
 report = {}
@@ -330,6 +328,12 @@ def chat_checks(browser, address, out, width, height):
     clip = page.evaluate("navigator.clipboard.readText()")
     check(clip.startswith("Set-Location -LiteralPath '") and clip.endswith("claude 'it''s a ''quote'' $(calc)'"), f"{label}: Copy command is a safe single-quoted PowerShell line ({clip[:90]!r})")
 
+    page.fill("#chat-input", 'say "hi" now')
+    page.click("#chat-copy")
+    page.wait_for_timeout(400)
+    clip = page.evaluate("navigator.clipboard.readText()")
+    check(clip.endswith("claude 'say ''hi'' now'"), f"{label}: Copy command leaves no double quote for Windows PowerShell 5.1 to mangle ({clip[-30:]!r})")
+
     page.click("#chat-open")
     check("General chat" in page.inner_text("#chat-chip"), f"{label}: the header Chat button gives a general chat")
     check(page.locator("#chat-log .msg.you").count() == 0, f"{label}: the general chat starts clean")
@@ -419,7 +423,7 @@ def main(out):
             )
             print(f"detector {viewport}: exit {result.returncode} {result.stdout.strip()[:900]} {result.stderr.strip()[:300]}")
         if not DETECTOR:
-            print("detector: skipped (OS_DETECTOR is not set)")
+            print("detector: skipped (CONSOLE_DETECTOR is not set)")
     finally:
         server.shutdown()
         server.server_close()

@@ -191,7 +191,7 @@
  {
   "name": "control characters kept in answers",
   "file": "chat.py",
-  "old": "if character in \"\\n\\t\" or unicodedata.category(character) not in (\"Cc\", \"Cf\", \"Zl\", \"Zp\", \"Cs\")",
+  "old": "if character in \"\\n\\t\" or unicodedata.category(character) not in world.HIDDEN_CATEGORIES",
   "new": "if True",
   "tests": [
    "tests/test_chat_runner.py"
@@ -286,7 +286,7 @@
   "edits": [
    [
     "chat.py",
-    "            subprocess.run([\"taskkill\", \"/PID\", str(process.pid), \"/T\", \"/F\"], capture_output=True, timeout=15)",
+    "            subprocess.run([\"taskkill\", \"/PID\", str(process.pid), \"/T\", \"/F\"], capture_output=True, timeout=LIMITS[\"kill_seconds\"])",
     "            pass"
    ],
    [
@@ -491,6 +491,71 @@
   "old": "{\"name\": plain(name, 120), \"when\": when(stamp)} for stamp, name in files",
   "new": "{\"name\": name, \"when\": when(stamp)} for stamp, name in files",
   "tests": [
+   "tests/test_today.py"
+  ]
+ },
+ {
+  "name": "chat allowed with the private Claude folder as the index",
+  "file": "chat.py",
+  "old": "if private_folder(resolved_or_none(self.index_dir) or Path(self.index_dir), self.home):",
+  "new": "if False:",
+  "tests": [
+   "tests/test_chat_runner.py::test_the_chat_will_not_start_when_the_index_folder_is_the_private_claude_folder"
+  ]
+ },
+ {
+  "name": "start allowed with the private Claude folder as the index",
+  "file": "serve_dashboard.py",
+  "old": "if chat.private_folder(arguments.root.resolve(), arguments.home):",
+  "new": "if False:",
+  "tests": [
+   "tests/test_portable.py::test_starting_with_the_private_claude_folder_as_the_index_is_refused"
+  ]
+ },
+ {
+  "name": "git runs the program a repo's config names",
+  "file": "build_dashboard.py",
+  "old": "\"-c\", \"core.fsmonitor=false\", ",
+  "new": "",
+  "tests": [
+   "tests/test_build_dashboard.py::test_reading_a_repo_never_runs_the_program_its_own_config_names"
+  ]
+ },
+ {
+  "name": "a run that worked and then failed is not charged",
+  "file": "chat.py",
+  "old": " or spoke or tooled:",
+  "new": ":",
+  "tests": [
+   "tests/test_chat_runner.py::test_a_run_that_did_work_and_then_ended_without_a_result_still_counts_towards_the_cap"
+  ]
+ },
+ {
+  "name": "projects with the same label share a node id",
+  "file": "world.py",
+  "old": "        while node[\"id\"] in used_ids:\n            node[\"id\"] += \"#\" + key[:6]\n",
+  "new": "",
+  "tests": [
+   "tests/test_world.py::test_two_index_rows_with_the_same_label_get_their_own_nodes"
+  ]
+ },
+ {
+  "name": "node path squeezed and cut again",
+  "file": "world.py",
+  "old": "\"path\": clean_path(path),",
+  "new": "\"path\": clean(path, 260),",
+  "tests": [
+   "tests/test_world.py::test_a_node_path_keeps_its_own_spaces_and_a_path_with_a_control_character_is_refused"
+  ]
+ },
+ {
+  "name": "hidden character list emptied",
+  "file": "build_dashboard.py",
+  "old": "HIDDEN_CATEGORIES = {\"Cc\", \"Cf\", \"Zl\", \"Zp\", \"Cs\"}",
+  "new": "HIDDEN_CATEGORIES = set()",
+  "tests": [
+   "tests/test_chat_runner.py",
+   "tests/test_serve_dashboard.py",
    "tests/test_today.py"
   ]
  }

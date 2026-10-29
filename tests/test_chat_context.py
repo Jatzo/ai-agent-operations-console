@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -33,15 +32,15 @@ def lab(tmp_path):
     (atlas / "reports" / "seo").mkdir(parents=True)
     ops = tmp_path / "work" / "Ops"
     ops.mkdir(parents=True)
-    os_dir = tmp_path / "os"
-    os_dir.mkdir()
+    index_dir = tmp_path / "os"
+    index_dir.mkdir()
     outside = tmp_path / "outside" / "secrets"
     outside.mkdir(parents=True)
-    return type("Lab", (), {"tmp": tmp_path, "user": user, "home": home, "atlas": atlas, "ops": ops, "os_dir": os_dir, "outside": outside, "projects": [atlas, ops]})
+    return type("Lab", (), {"tmp": tmp_path, "user": user, "home": home, "atlas": atlas, "ops": ops, "index_dir": index_dir, "outside": outside, "projects": [atlas, ops]})
 
 
 def resolve(lab, node):
-    return chat.resolve_context(node, os_dir=lab.os_dir, home=lab.home, projects=lab.projects)
+    return chat.resolve_context(node, index_dir=lab.index_dir, home=lab.home, projects=lab.projects)
 
 
 def node(kind, path, name="thing", **extra):
@@ -51,7 +50,7 @@ def node(kind, path, name="thing", **extra):
 def test_the_general_chat_works_from_the_home_base_with_no_extra_folders(lab):
     context = resolve(lab, None)
 
-    assert context.cwd == lab.os_dir
+    assert context.cwd == lab.index_dir
     assert context.add_dirs == []
     assert "read only" in context.label.lower()
 
@@ -66,7 +65,7 @@ def test_a_project_node_works_in_that_projects_folder_and_adds_nothing(lab):
 def test_a_project_path_that_is_not_in_the_index_is_never_used_as_a_folder(lab):
     context = resolve(lab, node("project", lab.outside, "Evil"))
 
-    assert context.cwd == lab.os_dir
+    assert context.cwd == lab.index_dir
     assert context.add_dirs == []
 
 
@@ -94,7 +93,7 @@ def test_a_node_that_points_at_the_claude_folder_projects_or_anything_wide_gets_
     context = resolve(lab, node(kind, where(lab)))
 
     assert context.add_dirs == []
-    assert context.cwd in (lab.os_dir,)
+    assert context.cwd in (lab.index_dir,)
 
 
 def test_a_refusal_says_why_so_the_page_can_show_it(lab):
@@ -107,7 +106,7 @@ def test_a_refusal_says_why_so_the_page_can_show_it(lab):
 def test_a_global_skill_adds_exactly_that_one_skill_folder(lab):
     context = resolve(lab, node("skill", lab.home / "skills" / "alpha", "alpha"))
 
-    assert context.cwd == lab.os_dir
+    assert context.cwd == lab.index_dir
     assert context.add_dirs == [str((lab.home / "skills" / "alpha").resolve())]
 
 
@@ -144,13 +143,13 @@ def test_a_report_under_a_project_works_in_the_project_and_one_elsewhere_in_the_
     elsewhere = resolve(lab, node("report", lab.outside, "Elsewhere"))
 
     assert inside.cwd == lab.atlas and inside.add_dirs == []
-    assert elsewhere.cwd == lab.os_dir and elsewhere.add_dirs == []
+    assert elsewhere.cwd == lab.index_dir and elsewhere.add_dirs == []
 
 
 def test_hubs_and_ideas_and_unknown_kinds_get_the_home_base_only(lab):
     for kind in ("hub", "idea", "mystery"):
         context = resolve(lab, node(kind, lab.home / "skills" / "alpha"))
-        assert context.cwd == lab.os_dir and context.add_dirs == []
+        assert context.cwd == lab.index_dir and context.add_dirs == []
 
 
 def test_a_junction_to_a_folder_outside_the_allowed_places_is_refused_and_one_to_an_allowed_place_is_resolved(lab):
@@ -200,7 +199,7 @@ def test_a_skill_inside_a_listed_project_that_sits_in_the_transcript_folder_is_s
     (transcripts / "skills" / "x").mkdir(parents=True)
 
     context = chat.resolve_context(
-        node("skill", transcripts / "skills" / "x", "x"), os_dir=lab.os_dir, home=lab.home, projects=[transcripts],
+        node("skill", transcripts / "skills" / "x", "x"), index_dir=lab.index_dir, home=lab.home, projects=[transcripts],
     )
 
     assert context.add_dirs == [] and "private" in context.refused
@@ -209,10 +208,10 @@ def test_a_skill_inside_a_listed_project_that_sits_in_the_transcript_folder_is_s
 def test_a_project_that_is_the_user_folder_or_the_claude_folder_never_becomes_the_working_folder(lab):
     for private in (lab.user, lab.home, lab.home / "projects" / "D--Atlas"):
         context = chat.resolve_context(
-            node("project", private, "Bad"), os_dir=lab.os_dir, home=lab.home, projects=[private],
+            node("project", private, "Bad"), index_dir=lab.index_dir, home=lab.home, projects=[private],
         )
 
-        assert context.cwd == lab.os_dir and context.add_dirs == []
+        assert context.cwd == lab.index_dir and context.add_dirs == []
 
 
 def test_the_prefix_uses_only_validated_names_and_paths(lab):

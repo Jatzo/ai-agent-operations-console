@@ -70,6 +70,9 @@ elif scenario == "error":
 elif scenario == "stderr_secret":
     sys.stderr.write("SECRET-FROM-STDERR sk-ant-PLANTED\n")
     sys.exit(2)
+elif scenario == "crash_after_work":
+    delta("Partial answer.")
+    sys.exit(3)
 elif scenario == "budget":
     delta("Part ")
     result(subtype="error_max_budget_usd", is_error=True, total_cost_usd=1.01)

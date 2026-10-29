@@ -30,21 +30,21 @@ def wait_until(check, seconds=10):
 
 @pytest.fixture
 def lab(tmp_path, monkeypatch):
-    os_dir = tmp_path / "os"
-    os_dir.mkdir()
+    index_dir = tmp_path / "os"
+    index_dir.mkdir()
     home = tmp_path / "home" / ".claude"
     home.mkdir(parents=True)
     monkeypatch.setenv("FAKE_PIDFILE", str(tmp_path / "pid.txt"))
     monkeypatch.setenv("FAKE_ARGSFILE", str(tmp_path / "args.json"))
     monkeypatch.setenv("FAKE_CHILDFILE", str(tmp_path / "child.txt"))
-    return type("Lab", (), {"tmp": tmp_path, "os_dir": os_dir, "home": home})
+    return type("Lab", (), {"tmp": tmp_path, "index_dir": index_dir, "home": home})
 
 
 def manager(lab, **limits):
     base = {"min_gap_seconds": 0, "heartbeat_seconds": 60}
     base.update(limits)
     return chat.ChatManager(
-        lab.os_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
+        lab.index_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
         version=lambda: "1.2.3", tested=lambda: {"1.2.3"}, limits=base,
     )
 
@@ -112,7 +112,7 @@ def test_the_process_runs_in_the_home_base_and_the_environment_is_cleaned(lab, m
     ask(manager(lab))
     args = read_args(lab)
 
-    assert Path(args["cwd"]).resolve() == lab.os_dir.resolve()
+    assert Path(args["cwd"]).resolve() == lab.index_dir.resolve()
     assert "ANTHROPIC_API_KEY" not in args["env"] and "CLAUDECODE" not in args["env"]
 
 
@@ -171,6 +171,28 @@ def test_an_unknown_failure_gives_the_generic_message_and_hides_stderr(lab, monk
 
     assert events[-1] == {"t": "error", "message": chat.FIXED_ERRORS["generic"]}
     assert "SECRET-FROM-STDERR" not in json.dumps(events) and "PLANTED" not in json.dumps(events)
+
+
+def test_a_run_that_did_work_and_then_ended_without_a_result_still_counts_towards_the_cap(lab, monkeypatch):
+    monkeypatch.setenv("FAKE_SCENARIO", "crash_after_work")
+    mgr = manager(lab)
+    events = ask(mgr)
+
+    assert events[-1] == {"t": "error", "message": chat.FIXED_ERRORS["generic"]}
+    assert mgr.session_cost == pytest.approx(chat.LIMITS["killed_run_usd"])
+
+
+def test_the_chat_will_not_start_when_the_index_folder_is_the_private_claude_folder(lab):
+    mgr = chat.ChatManager(
+        lab.home, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
+        version=lambda: "1.2.3", tested=lambda: {"1.2.3"}, limits={"min_gap_seconds": 0, "heartbeat_seconds": 60},
+    )
+
+    with pytest.raises(chat.ChatError) as caught:
+        ask(mgr)
+
+    assert caught.value.status == 409 and "private Claude data" in caught.value.message
+    assert not (lab.tmp / "pid.txt").exists()
 
 
 def test_a_budget_stop_gives_the_fixed_message_and_the_cost_still_counts(lab, monkeypatch):
@@ -373,8 +395,8 @@ def test_only_an_exe_is_accepted_as_claude_so_no_shell_script_can_be_run(tmp_pat
     real.write_bytes(b"x")
 
     with pytest.raises(chat.ChatError):
-        chat.find_executable({"OS_CLAUDE": str(shim)})
-    assert chat.find_executable({"OS_CLAUDE": str(real)}) == str(real)
+        chat.find_executable({"CONSOLE_CLAUDE": str(shim)})
+    assert chat.find_executable({"CONSOLE_CLAUDE": str(real)}) == str(real)
 
 
 def test_a_chat_whose_first_message_failed_starts_a_fresh_session_next_time(lab, monkeypatch):
@@ -447,7 +469,7 @@ def test_one_enormous_line_is_discarded_and_the_next_lines_still_work(lab, monke
 
 def test_chat_is_refused_when_the_version_has_not_been_tested(lab):
     mgr = chat.ChatManager(
-        lab.os_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
+        lab.index_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
         version=lambda: "9.9.9", tested=lambda: {"1.2.3"}, limits={"min_gap_seconds": 0},
     )
 
@@ -461,7 +483,7 @@ def test_chat_is_refused_when_the_version_has_not_been_tested(lab):
 
 def test_chat_is_refused_when_nothing_has_been_tested_yet(lab):
     mgr = chat.ChatManager(
-        lab.os_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
+        lab.index_dir, lab.home, lambda: [], launcher=[sys.executable, "-I", FAKE], executable="C:/fake/claude.exe",
         version=lambda: "1.2.3", tested=lambda: set(), limits={"min_gap_seconds": 0},
     )
 
@@ -479,7 +501,7 @@ def test_the_tested_versions_file_is_read_with_comments_and_blank_lines_ignored(
 
 def test_a_missing_claude_gives_the_fixed_message(lab):
     mgr = chat.ChatManager(
-        lab.os_dir, lab.home, lambda: [], launcher=[str(lab.tmp / "nope.exe")], executable="C:/fake/claude.exe",
+        lab.index_dir, lab.home, lambda: [], launcher=[str(lab.tmp / "nope.exe")], executable="C:/fake/claude.exe",
         version=lambda: "1.2.3", tested=lambda: {"1.2.3"}, limits={"min_gap_seconds": 0},
     )
 
