@@ -409,10 +409,9 @@
         }
         (groups[edge.kind] = groups[edge.kind] || []).push(i);
       });
-      Object.keys(groups).forEach(function (kind) {
-        var style = LINK[kind] || LINK.mentions;
+      function traceCurves(list) {
         context.beginPath();
-        groups[kind].forEach(function (i) {
+        list.forEach(function (i) {
           var c = curve(edges[i]);
           var a = toScreen(c.ax, c.ay);
           var cp = toScreen(c.cx, c.cy);
@@ -420,20 +419,16 @@
           context.moveTo(a[0], a[1]);
           context.quadraticCurveTo(cp[0], cp[1], b[0], b[1]);
         });
+      }
+      Object.keys(groups).forEach(function (kind) {
+        var style = LINK[kind] || LINK.mentions;
+        traceCurves(groups[kind]);
         context.strokeStyle = "rgba(" + ACCENT + "," + (focus ? style.alpha * 0.3 : style.alpha) + ")";
         context.lineWidth = style.width;
         context.stroke();
       });
       if (bright.length) {
-        context.beginPath();
-        bright.forEach(function (i) {
-          var c = curve(edges[i]);
-          var a = toScreen(c.ax, c.ay);
-          var cp = toScreen(c.cx, c.cy);
-          var b = toScreen(c.bx, c.by);
-          context.moveTo(a[0], a[1]);
-          context.quadraticCurveTo(cp[0], cp[1], b[0], b[1]);
-        });
+        traceCurves(bright);
         context.strokeStyle = "rgba(" + ACCENT + ",0.95)";
         context.lineWidth = 1.8;
         context.stroke();

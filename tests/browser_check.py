@@ -378,6 +378,14 @@ def poller_check(browser, address, server):
     server.scan.scan_file = real
 
 
+def refused_message_check(browser, address):
+    context, page = new_page(browser, address, 1440, 900, view="today")
+    page.route("**/api/overview*", lambda route: route.fulfill(status=403, json={"error": "Open the page from the address the server printed."}))
+    page.click("#today-refresh")
+    check(wait_until(lambda: "address the server printed" in page.inner_text("#banner"), 10), "a 403 shows the server's own message, not a guess")
+    context.close()
+
+
 def reduced_motion_check(browser, address):
     context, page = new_page(browser, address, 1440, 900, reduced="reduce")
     check(page.get_attribute("#calm", "aria-pressed") == "true", "reduced motion: the world starts in Calm")
@@ -415,6 +423,7 @@ def main(out):
                 chat_checks(browser, address, out, width, height)
             poller_check(browser, address, server)
             reduced_motion_check(browser, address)
+            refused_message_check(browser, address)
             browser.close()
         for viewport in ("390x844", "1440x900") if DETECTOR else ():
             result = subprocess.run(

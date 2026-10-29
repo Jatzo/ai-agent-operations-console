@@ -105,9 +105,6 @@
   }
 
   function explain(error) {
-    if (error.status === 403) {
-      return "The server restarted. Reload the page.";
-    }
     if (error.status === undefined) {
       return "Could not reach the server. Is the server window still open?";
     }
@@ -159,7 +156,11 @@
       area.select();
       var ok = document.execCommand("copy");
       area.remove();
-      return ok ? resolve() : reject(new Error("Copy was blocked."));
+      if (ok) {
+        resolve();
+      } else {
+        reject(new Error("Copy was blocked."));
+      }
     });
   }
 
