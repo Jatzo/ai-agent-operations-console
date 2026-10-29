@@ -35,7 +35,7 @@ Four things, in the order I worried about them.
 ## What the real command showed
 
 The tests above use a fake Claude. The fake can only prove what I thought of, so `tests/chat_gate.py` runs the
-real command in a throwaway folder with decoy secrets. It has 23 checks and costs about $0.06. The 23rd, a secret read through its short Windows name, was added after the last run.
+real command in a throwaway folder with decoy secrets. It has 23 checks and costs about $0.07.
 
 It found things the fake could not:
 
@@ -106,8 +106,10 @@ no next step, an alias, a value returned from a promise). None of them changes w
 - **The secret list matches file names.** A key inside `config.json` is readable.
 - **The token keeps out other web sites, not other programs.** Any program, or any other Windows account on the same
   computer, can fetch the page and read the token from it.
-- **Windows short names.** Files on some drives also have an old 8.3 name. The gate now asks Claude to read a secret
-  through that name, but I have not yet run that check against the real command.
+- **Windows short names.** Files on some drives also have an old 8.3 name. The gate asks Claude to read a secret
+  through that name, and the decoy value did not appear. It tries one file on one drive.
+- **The gate can trip on a sign-in refresh.** Its check that Claude Code wrote only its own records failed once,
+  because Claude Code rewrote its own sign-in file during the run. It passed on the next run, 23 of 23.
 - **A file can still steer Claude.** Read only limits the damage, and what Claude reads is sent to Anthropic. A
   hostile file can still choose which other allowed files get read and sent.
 - **Resuming a chat is tested only against the fake.** The real command is exercised one message at a time.
