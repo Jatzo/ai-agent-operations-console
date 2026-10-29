@@ -50,7 +50,7 @@ as they are written here:
 python serve_dashboard.py --root C:\path\to\index-folder
 ```
 
-`--home` points at the Claude folder to read skills, agents and history from. It defaults to `~\.claude`.
+`--home` points at the Claude folder to read skills, agents and history from. It defaults to `~\.claude`. The index folder may not be, or contain, that folder: the console refuses to start if it is.
 
 ### Or let Claude Code write the index for you
 
@@ -108,6 +108,8 @@ folder with decoy secrets, checks that Claude Code cannot change anything, read 
 files, and only then writes `tested_claude_version.txt`. Update Claude Code and the chat switches itself off until
 you run the gate again. `python tests\chat_gate.py --small` sends one message to show the stream format and cost.
 
+The chat looks for `claude.exe` on your path. Set `CONSOLE_CLAUDE` to the full path of one if the console should use a different copy.
+
 How the chat is locked down, what was tested and what was not is in [docs/WRITEUP.md](docs/WRITEUP.md).
 
 ## Tests
@@ -120,7 +122,7 @@ python tools\mutation_check.py
 ```
 
 - `pytest` runs the unit and server tests. None of them calls the real Claude Code: they use `tests/fake_claude.py`.
-- `browser_check.py` drives the demo world in Edge at phone and desktop width. Set `OS_DETECTOR` to a design
+- `browser_check.py` drives the demo world in Edge at phone and desktop width. Set `CONSOLE_DETECTOR` to a design
   detector command to run one; otherwise that step is skipped.
 - `mutation_check.py` breaks each protection on purpose, on a temporary copy, and checks that a test fails. See the
   write-up for what that proves and what it does not.
